@@ -1,6 +1,9 @@
-import { TreePine, FileText, Database, GitBranch, Search, X } from 'lucide-react';
+import { useState } from 'react';
+import { TreePine, FileText, Database, GitBranch, Search, X, Trash2 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import type { RelationType, ViewMode } from '@/types/genealogy';
+import type { Branch } from '@/types/genealogy';
 
 const navItems: { mode: ViewMode; label: string; icon: React.ReactNode }[] = [
   { mode: 'tree', label: 'Arbre', icon: <TreePine size={18} /> },
@@ -29,7 +32,10 @@ export default function Sidebar() {
     setSearchQuery,
     persons,
     relations,
+    deleteBranch,
   } = useApp();
+
+  const [branchToDelete, setBranchToDelete] = useState<Branch | null>(null);
 
   const allPersons = persons;
   const searchResults = searchQuery.length > 1
@@ -168,24 +174,50 @@ export default function Sidebar() {
           </h3>
           <div className="flex flex-wrap gap-1.5">
             {branches.map((branch) => (
-              <button
-                key={branch.id}
-                onClick={() => toggleBranchFilter(branch.id)}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-200 border ${
-                  activeBranchFilters.includes(branch.id)
-                    ? 'border-transparent text-[#0a0a0f]'
-                    : 'border-[#2a2a3a] text-[#8a8894] hover:border-[#5a5864]'
-                }`}
-                style={
-                  activeBranchFilters.includes(branch.id)
-                    ? { backgroundColor: branch.color }
-                    : { backgroundColor: 'transparent' }
-                }
-              >
-                {branch.name}
-              </button>
+              <div key={branch.id} className="flex items-center gap-0.5 group">
+                <button
+                  onClick={() => toggleBranchFilter(branch.id)}
+                  className={`px-2.5 py-1 rounded-l-md text-[11px] font-medium transition-all duration-200 border-y border-l ${
+                    activeBranchFilters.includes(branch.id)
+                      ? 'border-transparent text-[#0a0a0f]'
+                      : 'border-[#2a2a3a] text-[#8a8894] hover:border-[#5a5864]'
+                  }`}
+                  style={activeBranchFilters.includes(branch.id) ? { backgroundColor: branch.color } : {}}
+                >
+                  {branch.name}
+                </button>
+                <button
+                  onClick={() => setBranchToDelete(branch)}
+                  className={`px-1 py-1 rounded-r-md text-[11px] transition-all duration-200 border-y border-r opacity-0 group-hover:opacity-100 ${
+                    activeBranchFilters.includes(branch.id)
+                      ? 'border-transparent text-[#0a0a0f] hover:bg-black/20'
+                      : 'border-[#2a2a3a] text-[#5a5864] hover:text-red-400 hover:border-red-900/50'
+                  }`}
+                  style={activeBranchFilters.includes(branch.id) ? { backgroundColor: branch.color } : {}}
+                  title="Supprimer la branche"
+                >
+                  <Trash2 size={10} />
+                </button>
+              </div>
             ))}
           </div>
+
+          <AlertDialog open={!!branchToDelete} onOpenChange={open => { if (!open) setBranchToDelete(null); }}>
+            <AlertDialogContent className="bg-[#0f0f1a] border-[#2a2a3a] text-[#ede9e0]">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Supprimer « {branchToDelete?.name} » ?</AlertDialogTitle>
+                <AlertDialogDescription className="text-[#8a8894]">
+                  Toutes les personnes de cette branche et leurs relations seront supprimées définitivement.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="border-[#2a2a3a] text-[#8a8894] hover:bg-[#1e1e28]">Annuler</AlertDialogCancel>
+                <AlertDialogAction onClick={() => { if (branchToDelete) { deleteBranch(branchToDelete.id); setBranchToDelete(null); } }} className="bg-red-700 hover:bg-red-600 text-white">
+                  Supprimer
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
 

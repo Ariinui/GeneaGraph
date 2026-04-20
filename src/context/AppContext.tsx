@@ -95,6 +95,7 @@ interface AppContextType extends AppState {
   deletePerson: (id: string) => void;
   deleteRelation: (id: string) => void;
   clearAll: () => void;
+  deleteBranch: (branchId: string) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -176,19 +177,33 @@ function detectBranches(persons: Person[], relations: Relation[]): Branch[] {
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const sampleData = useMemo(() => getSampleData(), []);
-  const branches = useMemo(() => detectBranches(sampleData.persons, sampleData.relations), [sampleData]);
 
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [layoutMode, setLayoutMode] = useState<'physics' | 'hierarchical'>('physics');
   const [activeFilters, setActiveFilters] = useState<RelationType[]>(['parent', 'alliance', 'witness', 'godparent']);
-  const [activeBranchFilters, setActiveBranchFilters] = useState<string[]>(branches.map((b) => b.id));
+  const [activeBranchFilters, setActiveBranchFilters] = useState<string[]>([]);
   const [hoveredPersonId, setHoveredPersonId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [panelOpen, setPanelOpen] = useState(true);
   const [highlightedPath, setHighlightedPath] = useState<string[] | null>(null);
   const [persons, setPersons] = useState<Person[]>(() => getInitialTree().persons);
   const [relations, setRelations] = useState<Relation[]>(() => getInitialTree().relations);
+
+  const branches = useMemo(() => detectBranches(persons, relations), [persons, relations]);
+
+  const deleteBranch = useCallback((branchId: string) => {
+    const ids = persons.filter(p => p.branch === branchId).map(p => p.id);
+    setPersons(prev => prev.filter(p => !ids.includes(p.id)));
+    setRelations(prev => prev.filter(r => !ids.includes(r.from) && !ids.includes(r.to)));
+  }, [persons]);
+
+  useEffect(() => {
+    setActiveBranchFilters(prev => {
+      const newIds = branches.map(b => b.id).filter(id => !prev.includes(id));
+      return newIds.length ? [...prev, ...newIds] : prev;
+    });
+  }, [branches]);
 
   const toggleRelationFilter = useCallback((type: RelationType) => {
     setActiveFilters((prev) =>
@@ -345,6 +360,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     deletePerson,
     deleteRelation,
     clearAll,
+    deleteBranch,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

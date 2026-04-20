@@ -1,5 +1,12 @@
+import { useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { ChevronRight, ChevronLeft, Calendar, Briefcase, FileText, Users, GitBranch, Eye } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Calendar, Briefcase, FileText, Users, GitBranch, Eye, Pencil, Trash2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import type { Person } from '@/types/genealogy';
 
 export default function PersonPanel() {
   const {
@@ -13,7 +20,13 @@ export default function PersonPanel() {
     branches,
     getShortestPath,
     setHighlightedPath,
+    updatePerson,
+    deletePerson,
   } = useApp();
+
+  const [editOpen, setEditOpen]   = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editForm, setEditForm]   = useState<Partial<Person>>({});
 
   const person = persons.find((p) => p.id === selectedPersonId);
 
@@ -23,6 +36,19 @@ export default function PersonPanel() {
   const handlePersonClick = (pid: string) => {
     setSelectedPersonId(pid);
     window.dispatchEvent(new CustomEvent('geneagraph:selectPerson', { detail: pid }));
+  };
+
+  const openEdit = () => { setEditForm({ ...person }); setEditOpen(true); };
+  const handleEdit = () => {
+    if (!person || !editForm.firstName?.trim() || !editForm.lastName?.trim()) return;
+    updatePerson(person.id, editForm);
+    setEditOpen(false);
+  };
+  const handleDelete = () => {
+    if (!person) return;
+    deletePerson(person.id);
+    setSelectedPersonId(null);
+    setDeleteOpen(false);
   };
 
   const handleFindPath = (targetId: string) => {
@@ -78,9 +104,19 @@ export default function PersonPanel() {
                 {person.firstName[0]}{person.lastName[0]}
               </div>
               <div className="flex-1 min-w-0">
-                <h2 className="text-[18px] font-semibold text-[#e8e6e1] leading-tight" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
-                  {person.firstName} {person.lastName}
-                </h2>
+                <div className="flex items-start justify-between gap-2">
+                  <h2 className="text-[18px] font-semibold text-[#e8e6e1] leading-tight" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+                    {person.firstName} {person.lastName}
+                  </h2>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button onClick={openEdit} className="p-1.5 rounded-md text-[#8a8894] hover:text-[#c9a84c] hover:bg-[#1e1e28] transition-colors" title="Modifier">
+                      <Pencil size={13} />
+                    </button>
+                    <button onClick={() => setDeleteOpen(true)} className="p-1.5 rounded-md text-[#8a8894] hover:text-red-400 hover:bg-[#1e1e28] transition-colors" title="Supprimer">
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
                 <p className="text-[12px] text-[#8a8894] mt-0.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                   {person.birthDate?.split('-')[0] || '?'} — {person.deathDate?.split('-')[0] || '?'}
                 </p>
@@ -237,6 +273,65 @@ export default function PersonPanel() {
           <div className="h-6" />
         </div>
       )}
+
+      {/* Edit dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="bg-[#0f0f1a] border-[#2a2a3a] text-[#ede9e0] max-w-lg">
+          <DialogHeader>
+            <DialogTitle style={{ fontFamily: 'Cormorant Garamond, serif' }}>Modifier {person?.firstName} {person?.lastName}</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 pt-2">
+            {([['firstName','Prénom','Jean'],['lastName','Nom','Dupont'],['occupation','Métier','Cultivateur'],['birthPlace','Lieu naissance','Paris'],['deathPlace','Lieu décès','Lyon']] as [keyof Person, string, string][]).map(([key, label, ph]) => (
+              <div key={key}>
+                <Label className="text-[11px] text-[#8a8894]">{label}</Label>
+                <Input value={(editForm[key] as string) || ''} onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))}
+                  className="bg-[#080810] border-[#2a2a3a] text-[#ede9e0] mt-1" placeholder={ph} />
+              </div>
+            ))}
+            <div>
+              <Label className="text-[11px] text-[#8a8894]">Sexe</Label>
+              <select value={editForm.gender || 'M'} onChange={e => setEditForm(f => ({ ...f, gender: e.target.value as 'M'|'F' }))}
+                className="w-full bg-[#080810] border border-[#2a2a3a] rounded-md px-3 py-2 text-[12px] text-[#ede9e0] mt-1 focus:outline-none">
+                <option value="M">Masculin</option>
+                <option value="F">Féminin</option>
+              </select>
+            </div>
+            <div>
+              <Label className="text-[11px] text-[#8a8894]">Date naissance</Label>
+              <Input type="date" value={(editForm.birthDate as string) || ''} onChange={e => setEditForm(f => ({ ...f, birthDate: e.target.value }))}
+                className="bg-[#080810] border-[#2a2a3a] text-[#ede9e0] mt-1" />
+            </div>
+            <div>
+              <Label className="text-[11px] text-[#8a8894]">Date décès</Label>
+              <Input type="date" value={(editForm.deathDate as string) || ''} onChange={e => setEditForm(f => ({ ...f, deathDate: e.target.value }))}
+                className="bg-[#080810] border-[#2a2a3a] text-[#ede9e0] mt-1" />
+            </div>
+            <div className="col-span-2">
+              <Label className="text-[11px] text-[#8a8894]">Notes</Label>
+              <textarea value={(editForm.notes as string) || ''} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
+                className="w-full bg-[#080810] border border-[#2a2a3a] rounded-md px-3 py-2 text-[12px] text-[#ede9e0] mt-1 focus:outline-none resize-none h-16" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-3">
+            <Button variant="outline" onClick={() => setEditOpen(false)} className="border-[#2a2a3a] text-[#8a8894] hover:bg-[#1e1e28]">Annuler</Button>
+            <Button onClick={handleEdit} className="bg-[#c9a84c] text-[#080810] hover:bg-[#e0c97f]">Enregistrer</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm */}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent className="bg-[#0f0f1a] border-[#2a2a3a] text-[#ede9e0]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer {person?.firstName} {person?.lastName} ?</AlertDialogTitle>
+            <AlertDialogDescription className="text-[#8a8894]">Cette personne et toutes ses relations seront supprimées.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-[#2a2a3a] text-[#8a8894] hover:bg-[#1e1e28]">Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-red-700 hover:bg-red-600 text-white">Supprimer</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </aside>
   );
 }
