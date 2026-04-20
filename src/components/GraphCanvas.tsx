@@ -187,6 +187,10 @@ export default function GraphCanvas() {
     const network = new Network(containerRef.current, { nodes, edges }, options);
     networkRef.current = network;
 
+    network.once('stabilizationIterationsDone', () => {
+      network.setOptions({ physics: false });
+    });
+
     network.on('click', (params: any) => {
       if (params.nodes && params.nodes.length > 0) {
         setSelectedPersonId(params.nodes[0]);
