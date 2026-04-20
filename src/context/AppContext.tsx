@@ -1,6 +1,61 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import type { Person, Relation, Source, Branch, ViewMode, RelationType } from '@/types/genealogy';
 import { getSampleData, BRANCH_COLORS } from '@/data/sampleData';
+
+const STORAGE_KEY = 'geneagraph:tree';
+const STORAGE_VERSION = 1;
+
+function buildPersonsWithBranches(persons: Person[], relations: Relation[]): Person[] {
+  const branchMap = new Map<string, string>();
+  const adj: Map<string, Set<string>> = new Map();
+  for (const p of persons) adj.set(p.id, new Set());
+  for (const r of relations) {
+    if (r.type === 'parent' || r.type === 'alliance') {
+      adj.get(r.from)?.add(r.to);
+      adj.get(r.to)?.add(r.from);
+    }
+  }
+  const visited = new Set<string>();
+  const communities: string[][] = [];
+  for (const person of persons) {
+    if (visited.has(person.id)) continue;
+    const community: string[] = [];
+    const stack = [person.id];
+    while (stack.length > 0) {
+      const curr = stack.pop()!;
+      if (visited.has(curr)) continue;
+      visited.add(curr);
+      community.push(curr);
+      for (const neighbor of adj.get(curr) || []) {
+        if (!visited.has(neighbor)) stack.push(neighbor);
+      }
+    }
+    communities.push(community);
+  }
+  communities.forEach((community, idx) => {
+    if (community.length >= 3) {
+      for (const pid of community) branchMap.set(pid, `branch-${idx}`);
+    }
+  });
+  return persons.map(p => ({ ...p, branch: branchMap.get(p.id) }));
+}
+
+function getInitialTree(): { persons: Person[]; relations: Relation[] } {
+  const sd = getSampleData();
+  const fallback = buildPersonsWithBranches(sd.persons, sd.relations);
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.version === STORAGE_VERSION) {
+        return { persons: parsed.persons ?? fallback, relations: parsed.relations ?? sd.relations };
+      }
+    }
+  } catch {
+    console.error('[GeneaGraph] localStorage read error');
+  }
+  return { persons: fallback, relations: sd.relations };
+}
 
 interface AppState {
   persons: Person[];
@@ -35,6 +90,11 @@ interface AppContextType extends AppState {
   getPersonSources: (personId: string) => Source[];
   getConnectedPersons: (personId: string) => { person: Person; relation: Relation }[];
   getShortestPath: (from: string, to: string) => string[];
+  resetTree: () => void;
+  updatePerson: (id: string, updates: Partial<Omit<Person, 'id'>>) => void;
+  deletePerson: (id: string) => void;
+  deleteRelation: (id: string) => void;
+  clearAll: () => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -118,50 +178,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const sampleData = useMemo(() => getSampleData(), []);
   const branches = useMemo(() => detectBranches(sampleData.persons, sampleData.relations), [sampleData]);
 
-  // Assign branches to persons
-  const personsWithBranches = useMemo(() => {
-    const branchMap = new Map<string, string>();
-    // Recompute community membership
-    const adj: Map<string, Set<string>> = new Map();
-    for (const p of sampleData.persons) {
-      adj.set(p.id, new Set());
-    }
-    for (const r of sampleData.relations) {
-      if (r.type === 'parent' || r.type === 'alliance') {
-        adj.get(r.from)?.add(r.to);
-        adj.get(r.to)?.add(r.from);
-      }
-    }
-    const visited = new Set<string>();
-    const communities: string[][] = [];
-    for (const person of sampleData.persons) {
-      if (visited.has(person.id)) continue;
-      const community: string[] = [];
-      const stack = [person.id];
-      while (stack.length > 0) {
-        const curr = stack.pop()!;
-        if (visited.has(curr)) continue;
-        visited.add(curr);
-        community.push(curr);
-        for (const neighbor of adj.get(curr) || []) {
-          if (!visited.has(neighbor)) stack.push(neighbor);
-        }
-      }
-      communities.push(community);
-    }
-    communities.forEach((community, idx) => {
-      if (community.length >= 3) {
-        for (const pid of community) {
-          branchMap.set(pid, `branch-${idx}`);
-        }
-      }
-    });
-    return sampleData.persons.map((p) => ({
-      ...p,
-      branch: branchMap.get(p.id),
-    }));
-  }, [sampleData]);
-
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [layoutMode, setLayoutMode] = useState<'physics' | 'hierarchical'>('physics');
@@ -171,8 +187,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [panelOpen, setPanelOpen] = useState(true);
   const [highlightedPath, setHighlightedPath] = useState<string[] | null>(null);
-  const [persons, setPersons] = useState<Person[]>(personsWithBranches);
-  const [relations, setRelations] = useState<Relation[]>(sampleData.relations);
+  const [persons, setPersons] = useState<Person[]>(() => getInitialTree().persons);
+  const [relations, setRelations] = useState<Relation[]>(() => getInitialTree().relations);
 
   const toggleRelationFilter = useCallback((type: RelationType) => {
     setActiveFilters((prev) =>
@@ -197,6 +213,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const newRelation = { ...relation, id: `r-${Date.now()}` };
     setRelations((prev) => [...prev, newRelation]);
   }, []);
+
+  const updatePerson = useCallback((id: string, updates: Partial<Omit<Person, 'id'>>) => {
+    setPersons(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+  }, []);
+
+  const deletePerson = useCallback((id: string) => {
+    setPersons(prev => prev.filter(p => p.id !== id));
+    setRelations(prev => prev.filter(r => r.from !== id && r.to !== id));
+  }, []);
+
+  const deleteRelation = useCallback((id: string) => {
+    setRelations(prev => prev.filter(r => r.id !== id));
+  }, []);
+
+  const clearAll = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY);
+    setPersons([]);
+    setRelations([]);
+  }, []);
+
+  const resetTree = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY);
+    const sd = getSampleData();
+    setPersons(buildPersonsWithBranches(sd.persons, sd.relations));
+    setRelations(sd.relations);
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: STORAGE_VERSION, persons, relations }));
+      } catch {
+        console.error('[GeneaGraph] localStorage write error');
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [persons, relations]);
 
   const getPersonRelations = useCallback(
     (personId: string) => {
@@ -287,6 +340,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     getPersonSources,
     getConnectedPersons,
     getShortestPath,
+    resetTree,
+    updatePerson,
+    deletePerson,
+    deleteRelation,
+    clearAll,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
