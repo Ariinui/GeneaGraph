@@ -2,6 +2,10 @@ export type Gender = 'M' | 'F';
 
 export type RelationType = 'parent' | 'alliance' | 'witness' | 'godparent' | 'adoption' | 'tutelle';
 
+export type LayoutDirection = 'UD' | 'DU' | 'LR' | 'RL';
+
+export type HierarchyFocus = 'all' | 'ancestors' | 'descendants';
+
 export interface Person {
   id: string;
   firstName: string;

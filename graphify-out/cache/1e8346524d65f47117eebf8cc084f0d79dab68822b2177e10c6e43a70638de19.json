@@ -1,0 +1,1 @@
+{"nodes": [{"id": "src_lib_appwrite_ts", "label": "appwrite.ts", "file_type": "code", "source_file": "src\\lib\\appwrite.ts", "source_location": "L1"}], "edges": [{"source": "src_lib_appwrite_ts", "target": "appwrite", "relation": "imports_from", "confidence": "EXTRACTED", "source_file": "src\\lib\\appwrite.ts", "source_location": "L1", "weight": 1.0}], "raw_calls": []}

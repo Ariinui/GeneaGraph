@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
-import type { Person, Relation, Source, Branch, ViewMode, RelationType } from '@/types/genealogy';
+import type { Person, Relation, Source, Branch, ViewMode, RelationType, LayoutDirection, HierarchyFocus } from '@/types/genealogy';
 import { getSampleData, BRANCH_COLORS } from '@/data/sampleData';
 import type { ParsedPerson, ParsedRelation } from '@/utils/gedcomParser';
 import { appwriteService } from '@/services/appwriteService';
@@ -73,6 +73,10 @@ interface AppState {
   selectedPersonId: string | null;
   viewMode: ViewMode;
   layoutMode: 'physics' | 'hierarchical';
+  layoutDirection: LayoutDirection;
+  hierarchyFocus: HierarchyFocus;
+  hierarchyRootId: string | null;
+  generationDepth: number;
   activeFilters: RelationType[];
   activeBranchFilters: string[];
   hoveredPersonId: string | null;
@@ -91,6 +95,10 @@ interface AppContextType extends AppState {
   setSelectedPersonId: (id: string | null) => void;
   setViewMode: (mode: ViewMode) => void;
   setLayoutMode: (mode: 'physics' | 'hierarchical') => void;
+  setLayoutDirection: (dir: LayoutDirection) => void;
+  setHierarchyFocus: (focus: HierarchyFocus) => void;
+  setHierarchyRootId: (id: string | null) => void;
+  setGenerationDepth: (depth: number) => void;
   toggleRelationFilter: (type: RelationType) => void;
   toggleBranchFilter: (branchId: string) => void;
   setHoveredPersonId: (id: string | null) => void;
@@ -104,6 +112,8 @@ interface AppContextType extends AppState {
   getPersonSources: (personId: string) => Source[];
   getConnectedPersons: (personId: string) => { person: Person; relation: Relation }[];
   getShortestPath: (from: string, to: string) => string[];
+  getAncestors: (personId: string, maxDepth?: number) => string[];
+  getDescendants: (personId: string, maxDepth?: number) => string[];
   resetTree: () => void;
   updatePerson: (id: string, updates: Partial<Omit<Person, 'id'>>) => void;
   deletePerson: (id: string) => void;
@@ -200,6 +210,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [layoutMode, setLayoutMode] = useState<'physics' | 'hierarchical'>('physics');
+  const [layoutDirection, setLayoutDirection] = useState<LayoutDirection>('UD');
+  const [hierarchyFocus, setHierarchyFocus] = useState<HierarchyFocus>('all');
+  const [hierarchyRootId, setHierarchyRootId] = useState<string | null>(null);
+  const [generationDepth, setGenerationDepth] = useState<number>(10);
   const [activeFilters, setActiveFilters] = useState<RelationType[]>(['parent', 'alliance', 'witness', 'godparent', 'adoption', 'tutelle']);
   const [activeBranchFilters, setActiveBranchFilters] = useState<string[]>([]);
   const [hoveredPersonId, setHoveredPersonId] = useState<string | null>(null);
@@ -455,6 +469,62 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [persons, relations]
   );
 
+  const getAncestors = useCallback(
+    (personId: string, maxDepth: number = 10): string[] => {
+      const ancestors: string[] = [personId];
+      const visited = new Set<string>([personId]);
+      const queue: [string, number][] = [[personId, 0]];
+      
+      while (queue.length > 0) {
+        const [curr, depth] = queue.shift()!;
+        if (depth >= maxDepth) continue;
+        
+        const parents = relations
+          .filter(r => r.type === 'parent' && r.to === curr)
+          .map(r => r.from);
+        
+        for (const parent of parents) {
+          if (!visited.has(parent)) {
+            visited.add(parent);
+            ancestors.push(parent);
+            queue.push([parent, depth + 1]);
+          }
+        }
+      }
+      
+      return ancestors;
+    },
+    [relations]
+  );
+
+  const getDescendants = useCallback(
+    (personId: string, maxDepth: number = 10): string[] => {
+      const descendants: string[] = [personId];
+      const visited = new Set<string>([personId]);
+      const queue: [string, number][] = [[personId, 0]];
+      
+      while (queue.length > 0) {
+        const [curr, depth] = queue.shift()!;
+        if (depth >= maxDepth) continue;
+        
+        const children = relations
+          .filter(r => r.type === 'parent' && r.from === curr)
+          .map(r => r.to);
+        
+        for (const child of children) {
+          if (!visited.has(child)) {
+            visited.add(child);
+            descendants.push(child);
+            queue.push([child, depth + 1]);
+          }
+        }
+      }
+      
+      return descendants;
+    },
+    [relations]
+  );
+
   const value: AppContextType = {
     persons,
     relations,
@@ -464,6 +534,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     selectedPersonId,
     viewMode,
     layoutMode,
+    layoutDirection,
+    hierarchyFocus,
+    hierarchyRootId,
+    generationDepth,
     activeFilters,
     activeBranchFilters,
     hoveredPersonId,
@@ -476,6 +550,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSelectedPersonId,
     setViewMode,
     setLayoutMode,
+    setLayoutDirection,
+    setHierarchyFocus,
+    setHierarchyRootId,
+    setGenerationDepth,
     toggleRelationFilter,
     toggleBranchFilter,
     setHoveredPersonId,
@@ -489,6 +567,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     getPersonSources,
     getConnectedPersons,
     getShortestPath,
+    getAncestors,
+    getDescendants,
     resetTree,
     updatePerson,
     deletePerson,

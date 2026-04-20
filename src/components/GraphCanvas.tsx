@@ -1,9 +1,9 @@
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { Network, DataSet } from 'vis-network/standalone';
-import { Plus, Link2, GitMerge } from 'lucide-react';
+import { Plus, Link2, GitMerge, ArrowDown, ArrowUp, ArrowRight, ArrowLeft, Download, Users } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useApp } from '@/context/AppContext';
-import type { Person, Relation } from '@/types/genealogy';
+import type { Person, Relation, LayoutDirection, HierarchyFocus } from '@/types/genealogy';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -90,6 +90,10 @@ export default function GraphCanvas() {
     persons, relations, branches,
     selectedPersonId, setSelectedPersonId,
     layoutMode, setLayoutMode,
+    layoutDirection, setLayoutDirection,
+    hierarchyFocus, setHierarchyFocus,
+    hierarchyRootId, setHierarchyRootId,
+    generationDepth,
     activeFilters, activeBranchFilters,
     setHoveredPersonId,
     highlightedPath, setHighlightedPath,
@@ -99,6 +103,8 @@ export default function GraphCanvas() {
     showPivots, toggleShowPivots,
     betweennessMap,
     getShortestPath,
+    getAncestors,
+    getDescendants,
   } = useApp();
 
   const [pathMode, setPathMode] = useState(false);
@@ -130,9 +136,19 @@ export default function GraphCanvas() {
   }), [relations, persons, activeFilters, activeBranchFilters]);
 
   const visiblePersons = useMemo(() => {
-    const ids = new Set<string>();
-    filteredRelations.forEach(r => { ids.add(r.from); ids.add(r.to); });
-    persons.forEach(p => { if (!p.branch || activeBranchFilters.includes(p.branch)) ids.add(p.id); });
+    let ids = new Set<string>();
+    
+    if (layoutMode === 'hierarchical' && hierarchyRootId && hierarchyFocus !== 'all') {
+      if (hierarchyFocus === 'ancestors') {
+        ids = new Set(getAncestors(hierarchyRootId, generationDepth));
+      } else if (hierarchyFocus === 'descendants') {
+        ids = new Set(getDescendants(hierarchyRootId, generationDepth));
+      }
+    } else {
+      filteredRelations.forEach(r => { ids.add(r.from); ids.add(r.to); });
+      persons.forEach(p => { if (!p.branch || activeBranchFilters.includes(p.branch)) ids.add(p.id); });
+    }
+    
     let result = persons.filter(p => ids.has(p.id));
     if (yearRange) {
       result = result.filter(p => {
@@ -141,7 +157,7 @@ export default function GraphCanvas() {
       });
     }
     return result;
-  }, [persons, filteredRelations, activeBranchFilters, yearRange]);
+  }, [persons, filteredRelations, activeBranchFilters, yearRange, layoutMode, hierarchyRootId, hierarchyFocus, generationDepth, getAncestors, getDescendants]);
 
   const degreeMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -161,6 +177,52 @@ export default function GraphCanvas() {
 
   useEffect(() => { pathModeRef.current = pathMode; }, [pathMode]);
   useEffect(() => { pathNodeARef.current = pathNodeA; networkRef.current?.redraw(); }, [pathNodeA]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const network = networkRef.current;
+      if (!network) return;
+
+      const scale = network.getScale();
+      const pos = network.getViewPosition();
+      const anim = { duration: 100, easingFunction: 'easeOutQuad' as const };
+
+      switch (e.key) {
+        case 'ArrowUp':
+          network.moveTo({ position: { x: pos.x, y: pos.y - 50 / scale }, animation: anim });
+          break;
+        case 'ArrowDown':
+          network.moveTo({ position: { x: pos.x, y: pos.y + 50 / scale }, animation: anim });
+          break;
+        case 'ArrowLeft':
+          network.moveTo({ position: { x: pos.x - 50 / scale, y: pos.y }, animation: anim });
+          break;
+        case 'ArrowRight':
+          network.moveTo({ position: { x: pos.x + 50 / scale, y: pos.y }, animation: anim });
+          break;
+        case '+':
+        case '=':
+          network.moveTo({ scale: scale * 1.2, animation: anim });
+          break;
+        case '-':
+          network.moveTo({ scale: scale / 1.2, animation: anim });
+          break;
+        case 'f':
+          network.fit({ animation: { duration: 300, easingFunction: 'easeOutQuad' } });
+          break;
+        case 'Escape':
+          setSelectedPersonId(null);
+          setPanelOpen(false);
+          setHighlightedPath(null);
+          setPathMode(false);
+          setPathNodeA(null);
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [setSelectedPersonId, setPanelOpen, setHighlightedPath, setPathMode]);
 
   // ── selection: dim non-neighbors, no network recreation ───────────────────
   useEffect(() => {
@@ -341,11 +403,21 @@ export default function GraphCanvas() {
         stabilization: { enabled: true, iterations: 250, updateInterval: 15, fit: true },
       } : false,
       layout: layoutMode === 'hierarchical' ? {
-        hierarchical: { direction: 'UD', sortMethod: 'directed', levelSeparation: 160, nodeSpacing: 220, treeSpacing: 260, blockShifting: true, edgeMinimization: true, parentCentralization: true },
+        hierarchical: { 
+          direction: layoutDirection,
+          sortMethod: 'directed',
+          levelSeparation: layoutDirection === 'LR' || layoutDirection === 'RL' ? 220 : 160,
+          nodeSpacing: layoutDirection === 'LR' || layoutDirection === 'RL' ? 120 : 180,
+          treeSpacing: 260,
+          blockShifting: true,
+          edgeMinimization: true,
+          parentCentralization: true,
+          shakeTowards: 'leaves'
+        },
       } : {},
       interaction: {
         hover: true, tooltipDelay: 150, hideEdgesOnDrag: false,
-        navigationButtons: false, keyboard: false,
+        navigationButtons: false, keyboard: { enabled: true, bindToWindow: false, speed: { zoom: 0.5, move: 50 } },
         zoomView: true, dragView: true, dragNodes: true, multiselect: false, zoomSpeed: 0.35,
         hoverConnectedEdges: false,
       },
@@ -443,10 +515,9 @@ export default function GraphCanvas() {
       networkRef.current = null;
     };
   }, [
-    visiblePersons, filteredRelations, layoutMode, branchColorMap, degreeMap,
+    visiblePersons, filteredRelations, layoutMode, layoutDirection, branchColorMap, degreeMap,
     betweennessMap, showPivots,
     setSelectedPersonId, setHoveredPersonId, setPanelOpen, setHighlightedPath, getShortestPath,
-    // selectedPersonId & highlightedPath intentionally excluded — handled via refs
   ]);
 
   useEffect(() => {
@@ -469,7 +540,7 @@ export default function GraphCanvas() {
       <div ref={containerRef} className="w-full h-full" style={{ background: '#080810' }} />
 
       {/* HUD Controls */}
-      <div className="absolute top-4 left-4 flex items-center gap-2">
+      <div className="absolute top-4 left-4 flex flex-wrap items-center gap-2 max-w-[calc(100vw-32px)]">
         <div className="bg-[#14141c]/90 backdrop-blur-sm border border-[#2a2a3a] rounded-lg p-1 flex items-center gap-1">
           <button
             onClick={() => networkRef.current?.fit({ animation: { duration: 500, easingFunction: 'easeOutQuart' } })}
@@ -497,6 +568,49 @@ export default function GraphCanvas() {
           <button onClick={() => setLayoutMode('hierarchical')} className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-all cursor-pointer ${layoutMode === 'hierarchical' ? 'bg-[#c9a84c] text-[#0a0a0f]' : 'text-[#8a8894] hover:text-[#e8e6e1]'}`}>Hiérarchie</button>
         </div>
 
+        {layoutMode === 'hierarchical' && (
+          <>
+            <div className="bg-[#14141c]/90 backdrop-blur-sm border border-[#2a2a3a] rounded-lg p-1 flex items-center gap-0.5">
+              {(['UD', 'DU', 'LR', 'RL'] as LayoutDirection[]).map(dir => (
+                <button
+                  key={dir}
+                  onClick={() => setLayoutDirection(dir)}
+                  className={`p-1.5 rounded-md transition-all cursor-pointer ${layoutDirection === dir ? 'bg-[#c9a84c]/20 text-[#c9a84c]' : 'text-[#5a5864] hover:text-[#e8e6e1]'}`}
+                  title={dir === 'UD' ? 'Haut → Bas' : dir === 'DU' ? 'Bas → Haut' : dir === 'LR' ? 'Gauche → Droite' : 'Droite → Gauche'}
+                >
+                  {dir === 'UD' ? <ArrowDown size={14} /> : dir === 'DU' ? <ArrowUp size={14} /> : dir === 'LR' ? <ArrowRight size={14} /> : <ArrowLeft size={14} />}
+                </button>
+              ))}
+            </div>
+
+            <div className="bg-[#14141c]/90 backdrop-blur-sm border border-[#2a2a3a] rounded-lg p-1 flex items-center gap-0.5">
+              {(['all', 'ancestors', 'descendants'] as HierarchyFocus[]).map(focus => (
+                <button
+                  key={focus}
+                  onClick={() => { setHierarchyFocus(focus); if (focus !== 'all' && selectedPersonId) setHierarchyRootId(selectedPersonId); }}
+                  className={`p-1.5 rounded-md transition-all cursor-pointer ${hierarchyFocus === focus ? 'bg-[#4a90a4]/20 text-[#4a90a4]' : 'text-[#5a5864] hover:text-[#e8e6e1]'}`}
+                  title={focus === 'all' ? 'Tout afficher' : focus === 'ancestors' ? 'Ancêtres uniquement' : 'Descendants uniquement'}
+                >
+                  {focus === 'all' ? <Users size={14} /> : focus === 'ancestors' ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+                </button>
+              ))}
+            </div>
+
+            {hierarchyFocus !== 'all' && (
+              <select
+                value={hierarchyRootId || ''}
+                onChange={e => setHierarchyRootId(e.target.value || null)}
+                className="bg-[#14141c]/90 backdrop-blur-sm border border-[#2a2a3a] rounded-lg px-2 py-1.5 text-[11px] text-[#e8e6e1] cursor-pointer"
+              >
+                <option value="">Sélectionner une racine</option>
+                {persons.map(p => (
+                  <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>
+                ))}
+              </select>
+            )}
+          </>
+        )}
+
         <button
           onClick={() => quickAddTriggerRef.current?.()}
           className="bg-[#c9a84c]/10 hover:bg-[#c9a84c]/20 border border-[#c9a84c]/40 hover:border-[#c9a84c]/70 text-[#c9a84c] rounded-lg p-2 transition-all backdrop-blur-sm cursor-pointer"
@@ -523,6 +637,24 @@ export default function GraphCanvas() {
           className={`rounded-lg p-2 transition-all backdrop-blur-sm cursor-pointer border ${pathMode ? 'bg-[#4a9eff]/20 border-[#4a9eff]/60 text-[#4a9eff]' : 'bg-[#14141c]/90 border-[#2a2a3a] text-[#5a5864] hover:text-[#e8e6e1]'}`}
         >
           <Link2 size={15} />
+        </button>
+
+        <button
+          onClick={() => {
+            if (containerRef.current) {
+              const canvas = containerRef.current.querySelector('canvas');
+              if (canvas) {
+                const link = document.createElement('a');
+                link.download = 'geneagraph.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+              }
+            }
+          }}
+          title="Exporter en PNG"
+          className="rounded-lg p-2 transition-all backdrop-blur-sm cursor-pointer border bg-[#14141c]/90 border-[#2a2a3a] text-[#5a5864] hover:text-[#e8e6e1]"
+        >
+          <Download size={15} />
         </button>
       </div>
 
