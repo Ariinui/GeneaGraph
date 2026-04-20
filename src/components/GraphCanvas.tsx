@@ -477,9 +477,7 @@ export default function GraphCanvas() {
         arrows: (r.type === 'parent' || r.type === 'adoption' || r.type === 'tutelle')
           ? { to: { enabled: true, scaleFactor: 0.45 } } : undefined,
         font: { color: '#6a6874', size: 9, face: 'Outfit, system-ui, sans-serif', background: 'rgba(10,10,15,0.85)', strokeWidth: 0 },
-        smooth: (layoutMode === 'hierarchical'
-          ? { enabled: false }
-          : { enabled: true, type: 'dynamic' }) as any,
+        smooth: { enabled: true, type: 'dynamic' as const, roundness: 0.2 },
       };
     });
 
@@ -501,13 +499,12 @@ export default function GraphCanvas() {
         hierarchical: {
           direction: layoutDirection,
           sortMethod: 'directed',
-          levelSeparation: layoutDirection === 'LR' || layoutDirection === 'RL' ? 240 : 180,
-          nodeSpacing: 110,
-          treeSpacing: 200,
+          levelSeparation: layoutDirection === 'LR' || layoutDirection === 'RL' ? 220 : 160,
+          nodeSpacing: layoutDirection === 'LR' || layoutDirection === 'RL' ? 120 : 220,
+          treeSpacing: 260,
           blockShifting: true,
           edgeMinimization: true,
           parentCentralization: true,
-          shakeTowards: 'roots',
         },
       } : {},
       interaction: {
