@@ -163,11 +163,15 @@ export default function GraphCanvas() {
 
     const nodesData = visiblePersons.map(p => {
       const degree      = degreeMap.get(p.id) || 0;
-      const size        = Math.max(26, Math.min(44, 26 + degree * 3));
+      const size        = Math.max(36, Math.min(56, 36 + degree * 3));
       const branchColor = p.branch ? (branchColorMap.get(p.branch) || '#5a5a6a') : '#3a3a4a';
       const genderColor = p.gender === 'M' ? '#4a9eff' : '#f472b6';
-      const initials    = `${p.firstName?.[0] || '?'}${p.lastName?.[0] || ''}`.toUpperCase();
+      const firstName   = p.firstName || '';
+      const lastName    = p.lastName  || '';
       const [br, bg, bb] = hexToRgb(branchColor);
+
+      // Max usable text width inside circle (inscribed rectangle ≈ r*√2)
+      const maxTextW = size * 1.28;
 
       return {
         id: p.id,
@@ -176,59 +180,55 @@ export default function GraphCanvas() {
         shape: 'custom' as const,
         ctxRenderer: ({ ctx, x, y, state: { selected, hover } }: any) => ({
           drawNode() {
-            const isDimmed  = dimmedRef.current.has(p.id);
-            const isOnPath  = highlightedPathRef.current?.includes(p.id) || false;
-            const r         = size;
+            const isDimmed = dimmedRef.current.has(p.id);
+            const isOnPath = highlightedPathRef.current?.includes(p.id) || false;
+            const r        = size;
 
             ctx.save();
             ctx.globalAlpha = isDimmed ? 0.18 : 1;
 
-            // ── glow ──────────────────────────────────────────────────────────
+            // ── glow ─────────────────────────────────────────────────────────
             if (selected) {
-              ctx.shadowColor = 'rgba(201,168,76,0.8)';
-              ctx.shadowBlur  = 22;
+              ctx.shadowColor = 'rgba(201,168,76,0.8)'; ctx.shadowBlur = 24;
             } else if (isOnPath) {
-              ctx.shadowColor = 'rgba(201,168,76,0.45)';
-              ctx.shadowBlur  = 14;
+              ctx.shadowColor = 'rgba(201,168,76,0.45)'; ctx.shadowBlur = 14;
             } else if (!isDimmed) {
-              ctx.shadowColor = 'rgba(0,0,0,0.55)';
-              ctx.shadowBlur  = 8;
-              ctx.shadowOffsetY = 3;
+              ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 3;
             }
 
-            // ── fill (branch color, muted) ────────────────────────────────────
+            // ── fill ─────────────────────────────────────────────────────────
             ctx.beginPath();
             ctx.arc(x, y, r, 0, 2 * Math.PI);
-            ctx.fillStyle = `rgba(${br},${bg},${bb},${selected ? 0.5 : 0.28})`;
+            ctx.fillStyle = `rgba(${br},${bg},${bb},${selected ? 0.55 : 0.3})`;
             ctx.fill();
+            ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
 
-            ctx.shadowBlur    = 0;
-            ctx.shadowOffsetY = 0;
-
-            // ── border (gender color, gold if selected/path) ──────────────────
-            ctx.strokeStyle = selected ? '#c9a84c'
-                            : isOnPath ? '#e0c97f'
-                            : hover    ? '#c9a84c'
-                            : genderColor;
+            // ── border ───────────────────────────────────────────────────────
+            ctx.strokeStyle = selected ? '#c9a84c' : isOnPath ? '#e0c97f' : hover ? '#c9a84c' : genderColor;
             ctx.lineWidth   = selected || isOnPath ? 3.5 : 2;
             ctx.stroke();
 
-            // ── initials ─────────────────────────────────────────────────────
-            const initFontSize = Math.max(12, Math.round(r * 0.52));
-            ctx.font        = `700 ${initFontSize}px Inter, -apple-system, sans-serif`;
+            // ── name inside: auto-fit font size ──────────────────────────────
+            const textColor = isDimmed ? 'rgba(200,200,200,0.35)' : selected ? '#ffffff' : '#eceae5';
             ctx.textAlign   = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillStyle   = isDimmed ? 'rgba(200,200,200,0.35)' : selected ? '#ffffff' : '#eceae5';
-            ctx.fillText(initials, x, y);
+            ctx.fillStyle   = textColor;
 
-            // ── name below ───────────────────────────────────────────────────
-            const nameFontSize = Math.max(11, Math.round(r * 0.40));
-            const lineH        = nameFontSize + 3;
-            ctx.font        = `${nameFontSize}px Inter, -apple-system, sans-serif`;
-            ctx.textBaseline = 'top';
-            ctx.fillStyle   = isDimmed ? 'rgba(140,140,140,0.3)' : selected ? '#ffffff' : '#bfbcb7';
-            ctx.fillText(p.firstName || '', x, y + r + 7);
-            ctx.fillText(p.lastName  || '', x, y + r + 7 + lineH);
+            // Find font size that fits longest of the two lines
+            const longestWord = firstName.length >= lastName.length ? firstName : lastName;
+            let fs = Math.min(15, Math.max(9, Math.round(r * 0.38)));
+            ctx.font = `600 ${fs}px Inter, -apple-system, sans-serif`;
+            while (ctx.measureText(longestWord).width > maxTextW && fs > 8) {
+              fs--;
+              ctx.font = `600 ${fs}px Inter, -apple-system, sans-serif`;
+            }
+
+            const lineH  = fs + 3;
+            const totalH = lineH * 2 - 3;
+            const startY = y - totalH / 2 + fs * 0.35;
+
+            ctx.textBaseline = 'middle';
+            ctx.fillText(firstName, x, startY);
+            ctx.fillText(lastName,  x, startY + lineH);
 
             ctx.restore();
           },
@@ -270,7 +270,7 @@ export default function GraphCanvas() {
       physics: layoutMode === 'physics' ? {
         enabled: true,
         solver: 'barnesHut',
-        barnesHut: { gravitationalConstant: -7000, centralGravity: 0.15, springLength: 270, springConstant: 0.032, damping: 0.92, avoidOverlap: 0.9 },
+        barnesHut: { gravitationalConstant: -8000, centralGravity: 0.12, springLength: 300, springConstant: 0.028, damping: 0.92, avoidOverlap: 1.0 },
         stabilization: { enabled: true, iterations: 250, updateInterval: 15, fit: true },
       } : false,
       layout: layoutMode === 'hierarchical' ? {
