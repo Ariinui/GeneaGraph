@@ -74,6 +74,9 @@ function isEdgeOnPath(edge: Relation, path: string[]): boolean {
 
 const positionsKey = (mode: string) => `geneagraph:positions:${mode}`;
 
+// ── Global position cache that persists across network recreations ─────────────
+const globalPositionsCache = new Map<string, Record<string, { x: number; y: number }>>();
+
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function GraphCanvas() {
@@ -85,6 +88,7 @@ export default function GraphCanvas() {
   const dimmedRef          = useRef<Set<string>>(new Set());
   const highlightedPathRef = useRef<string[] | null>(null);
   const pathModeRef        = useRef(false);
+  const lastLayoutModeRef  = useRef<string>('physics');
 
   const {
     persons, relations, branches,
@@ -253,12 +257,24 @@ export default function GraphCanvas() {
   const createNetwork = useCallback(() => {
     if (!containerRef.current) return;
 
-    // ── restore saved positions (per layout mode) ─────────────────────────────
+    // ── restore saved positions from cache or localStorage ─────────────────────
+    const cacheKey = positionsKey(layoutMode);
     let savedPositions: Record<string, { x: number; y: number }> = {};
-    try {
-      const raw = localStorage.getItem(positionsKey(layoutMode));
-      if (raw) savedPositions = JSON.parse(raw);
-    } catch {}
+    
+    // First check in-memory cache (faster, survives network recreation)
+    if (globalPositionsCache.has(cacheKey)) {
+      savedPositions = globalPositionsCache.get(cacheKey)!;
+    } else {
+      // Fallback to localStorage
+      try {
+        const raw = localStorage.getItem(cacheKey);
+        if (raw) {
+          savedPositions = JSON.parse(raw);
+          globalPositionsCache.set(cacheKey, savedPositions);
+        }
+      } catch {}
+    }
+    
     const allHavePositions = layoutMode === 'physics' && visiblePersons.length > 0 && visiblePersons.every(p => savedPositions[p.id]);
 
     // ── shared canvas for font-size pre-computation ───────────────────────────
@@ -435,8 +451,27 @@ export default function GraphCanvas() {
 
     const savePositions = () => {
       try {
-        localStorage.setItem(positionsKey(layoutMode), JSON.stringify(network.getPositions()));
+        const positions = network.getPositions();
+        const cacheKey = positionsKey(layoutMode);
+        
+        // Save to in-memory cache (immediate, survives recreation)
+        globalPositionsCache.set(cacheKey, positions);
+        
+        // Save to localStorage (persistent across sessions)
+        localStorage.setItem(cacheKey, JSON.stringify(positions));
       } catch {}
+    };
+
+    // Save positions before destroying
+    const saveAndCleanup = () => {
+      if (networkRef.current && !destroyed) {
+        try {
+          const positions = networkRef.current.getPositions();
+          const cacheKey = positionsKey(lastLayoutModeRef.current);
+          globalPositionsCache.set(cacheKey, positions);
+          localStorage.setItem(cacheKey, JSON.stringify(positions));
+        } catch {}
+      }
     };
 
     if (layoutMode === 'hierarchical') {
@@ -464,6 +499,9 @@ export default function GraphCanvas() {
     }
 
     network.on('dragEnd', () => { if (!destroyed) savePositions(); });
+    
+    // Save positions when a node is released after dragging
+    network.on('release', () => { if (!destroyed) savePositions(); });
 
     network.on('click', (params: any) => {
       const clickedId: string | null = params.nodes?.length > 0 ? params.nodes[0] : null;
@@ -508,9 +546,13 @@ export default function GraphCanvas() {
     };
     window.addEventListener('geneagraph:selectPerson', handleSelectPerson);
 
+    // Update ref for cleanup
+    lastLayoutModeRef.current = layoutMode;
+
     return () => {
       destroyed = true;
       window.removeEventListener('geneagraph:selectPerson', handleSelectPerson);
+      saveAndCleanup();
       network.destroy();
       networkRef.current = null;
     };
@@ -524,6 +566,50 @@ export default function GraphCanvas() {
     const cleanup = createNetwork();
     return cleanup;
   }, [createNetwork]);
+
+  // Save positions when layout mode changes
+  useEffect(() => {
+    return () => {
+      if (networkRef.current) {
+        try {
+          const positions = networkRef.current.getPositions();
+          const cacheKey = positionsKey(layoutMode);
+          globalPositionsCache.set(cacheKey, positions);
+          localStorage.setItem(cacheKey, JSON.stringify(positions));
+        } catch {}
+      }
+    };
+  }, [layoutMode]);
+
+  // Save positions before page unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (networkRef.current) {
+        try {
+          const positions = networkRef.current.getPositions();
+          const cacheKey = positionsKey(layoutMode);
+          globalPositionsCache.set(cacheKey, positions);
+          localStorage.setItem(cacheKey, JSON.stringify(positions));
+        } catch {}
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [layoutMode]);
+
+  // Periodic save every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (networkRef.current) {
+        try {
+          const positions = networkRef.current.getPositions();
+          const cacheKey = positionsKey(layoutMode);
+          globalPositionsCache.set(cacheKey, positions);
+        } catch {}
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [layoutMode]);
 
   const handleQuickAdd = () => {
     if (!quickForm.firstName.trim()) return;
