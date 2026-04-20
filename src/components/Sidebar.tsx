@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
-import { TreePine, FileText, Database, GitBranch, Search, X, Trash2, ChevronLeft, ChevronRight, Clock, BarChart3 } from 'lucide-react';
+import { TreePine, FileText, Database, GitBranch, Search, X, Trash2, ChevronLeft, ChevronRight, Clock, BarChart3, Menu } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import type { RelationType, ViewMode } from '@/types/genealogy';
@@ -67,7 +67,7 @@ export default function Sidebar() {
   }).length;
 
   const [branchToDelete, setBranchToDelete] = useState<Branch | null>(null);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   const allPersons = persons;
   const searchResults = searchQuery.length > 1
@@ -86,42 +86,61 @@ export default function Sidebar() {
 
   if (collapsed) {
     return (
-      <aside className="w-[56px] min-w-[56px] h-screen bg-[#0a0a0f] border-r border-[#2a2a3a] flex flex-col items-center py-4 gap-1">
-        <div className="w-8 h-8 rounded-lg bg-[#c9a84c]/10 border border-[#c9a84c]/30 flex items-center justify-center mb-3">
-          <TreePine size={15} className="text-[#c9a84c]" />
-        </div>
-
-        {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          return (
-            <button
-              key={item.mode}
-              onClick={() => { setViewMode(item.mode); navigate(item.path); }}
-              title={item.label}
-              className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                isActive ? 'bg-[#1e1e28] text-[#c9a84c]' : 'text-[#5a5864] hover:bg-[#14141c] hover:text-[#e8e6e1]'
-              }`}
-            >
-              {item.icon}
-            </button>
-          );
-        })}
-
-        <div className="flex-1" />
-
+      <>
+        {/* Mobile hamburger button */}
         <button
           onClick={() => setCollapsed(false)}
-          className="w-10 h-10 rounded-lg flex items-center justify-center text-[#5a5864] hover:bg-[#14141c] hover:text-[#c9a84c] transition-all cursor-pointer"
-          title="Ouvrir la sidebar"
+          className="fixed top-4 left-4 z-50 md:hidden w-10 h-10 rounded-lg bg-[#0a0a0f]/90 backdrop-blur-sm border border-[#2a2a3a] flex items-center justify-center text-[#c9a84c] transition-all cursor-pointer"
+          title="Menu"
         >
-          <ChevronRight size={16} />
+          <Menu size={18} />
         </button>
-      </aside>
+        
+        {/* Desktop collapsed sidebar */}
+        <aside className="hidden md:flex w-[56px] min-w-[56px] h-screen bg-[#0a0a0f] border-r border-[#2a2a3a] flex-col items-center py-4 gap-1">
+          <div className="w-8 h-8 rounded-lg bg-[#c9a84c]/10 border border-[#c9a84c]/30 flex items-center justify-center mb-3">
+            <TreePine size={15} className="text-[#c9a84c]" />
+          </div>
+
+          {navItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <button
+                key={item.mode}
+                onClick={() => { setViewMode(item.mode); navigate(item.path); }}
+                title={item.label}
+                className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                  isActive ? 'bg-[#1e1e28] text-[#c9a84c]' : 'text-[#5a5864] hover:bg-[#14141c] hover:text-[#e8e6e1]'
+                }`}
+              >
+                {item.icon}
+              </button>
+            );
+          })}
+
+          <div className="flex-1" />
+
+          <button
+            onClick={() => setCollapsed(false)}
+            className="w-10 h-10 rounded-lg flex items-center justify-center text-[#5a5864] hover:bg-[#14141c] hover:text-[#c9a84c] transition-all cursor-pointer"
+            title="Ouvrir la sidebar"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </aside>
+      </>
     );
   }
 
   return (
-    <aside className="w-[280px] min-w-[280px] h-screen bg-[#0a0a0f] border-r border-[#2a2a3a] flex flex-col overflow-hidden">
+    <>
+      {/* Mobile overlay */}
+      <div 
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+        onClick={() => setCollapsed(true)}
+      />
+      
+      <aside className="w-[280px] min-w-[280px] h-screen bg-[#0a0a0f] border-r border-[#2a2a3a] flex flex-col overflow-hidden fixed md:relative z-50 md:z-auto">
       <div className="px-5 py-5 border-b border-[#2a2a3a]">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -367,5 +386,6 @@ export default function Sidebar() {
         </div>
       </div>
     </aside>
+    </>
   );
 }
