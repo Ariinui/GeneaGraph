@@ -63,8 +63,15 @@ function relationToDocument(relation: Relation): Record<string, unknown> {
 export const appwriteService = {
   async getPersons(): Promise<Person[]> {
     try {
-      const response = await databases.listDocuments(db.id, PERSONS_COLLECTION);
-      return response.documents.map(documentToPerson);
+      const all: Person[] = [];
+      let cursor: string | undefined;
+      do {
+        const queries = [Query.limit(100), ...(cursor ? [Query.cursorAfter(cursor)] : [])];
+        const response = await databases.listDocuments(db.id, PERSONS_COLLECTION, queries);
+        all.push(...response.documents.map(documentToPerson));
+        cursor = response.documents.length === 100 ? response.documents[99].$id : undefined;
+      } while (cursor);
+      return all;
     } catch (error) {
       console.error('Error fetching persons:', error);
       return [];
@@ -121,8 +128,15 @@ export const appwriteService = {
 
   async getRelations(): Promise<Relation[]> {
     try {
-      const response = await databases.listDocuments(db.id, RELATIONS_COLLECTION);
-      return response.documents.map(documentToRelation);
+      const all: Relation[] = [];
+      let cursor: string | undefined;
+      do {
+        const queries = [Query.limit(100), ...(cursor ? [Query.cursorAfter(cursor)] : [])];
+        const response = await databases.listDocuments(db.id, RELATIONS_COLLECTION, queries);
+        all.push(...response.documents.map(documentToRelation));
+        cursor = response.documents.length === 100 ? response.documents[99].$id : undefined;
+      } while (cursor);
+      return all;
     } catch (error) {
       console.error('Error fetching relations:', error);
       return [];
