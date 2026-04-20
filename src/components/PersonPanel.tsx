@@ -63,7 +63,8 @@ export default function PersonPanel() {
     return (
       <button
         onClick={togglePanel}
-        className="fixed right-0 top-1/2 -translate-y-1/2 z-50 w-8 h-16 bg-[#14141c] border border-r-0 border-[#2a2a3a] rounded-l-lg flex items-center justify-center text-[#8a8894] hover:text-[#c9a84c] transition-colors"
+        className="w-[40px] min-w-[40px] h-screen bg-[#0a0a0f] border-l border-[#2a2a3a] flex flex-col items-center justify-center gap-1 text-[#5a5864] hover:text-[#c9a84c] hover:bg-[#0d0d15] transition-colors"
+        title="Ouvrir le panneau"
       >
         <ChevronLeft size={16} />
       </button>
@@ -71,14 +72,20 @@ export default function PersonPanel() {
   }
 
   return (
-    <aside className="w-[380px] min-w-[380px] h-screen bg-[#0a0a0f] border-l border-[#2a2a3a] flex flex-col overflow-hidden relative">
-      {/* Toggle button */}
-      <button
-        onClick={togglePanel}
-        className="absolute left-0 top-1/2 -translate-x-full -translate-y-1/2 z-50 w-8 h-16 bg-[#14141c] border border-r-0 border-[#2a2a3a] rounded-l-lg flex items-center justify-center text-[#8a8894] hover:text-[#c9a84c] transition-colors"
-      >
-        <ChevronRight size={16} />
-      </button>
+    <aside className="w-[380px] min-w-[380px] h-screen bg-[#0a0a0f] border-l border-[#2a2a3a] flex flex-col overflow-hidden">
+      {/* Panel header with close button */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a3a]">
+        <span className="text-[11px] text-[#5a5864] uppercase tracking-[0.15em] font-medium" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+          Fiche personnelle
+        </span>
+        <button
+          onClick={togglePanel}
+          className="w-7 h-7 rounded-md flex items-center justify-center text-[#5a5864] hover:bg-[#1e1e28] hover:text-[#c9a84c] transition-all"
+          title="Fermer le panneau"
+        >
+          <ChevronRight size={14} />
+        </button>
+      </div>
 
       {!person ? (
         <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">

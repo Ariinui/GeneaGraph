@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
-import { TreePine, FileText, Database, GitBranch, Search, X, Trash2 } from 'lucide-react';
+import { TreePine, FileText, Database, GitBranch, Search, X, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import type { RelationType, ViewMode } from '@/types/genealogy';
@@ -38,6 +38,7 @@ export default function Sidebar() {
   } = useApp();
 
   const [branchToDelete, setBranchToDelete] = useState<Branch | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
 
   const allPersons = persons;
   const searchResults = searchQuery.length > 1
@@ -54,20 +55,68 @@ export default function Sidebar() {
   const minYear = years.length ? Math.min(...years) : 0;
   const maxYear = years.length ? Math.max(...years) : 0;
 
+  if (collapsed) {
+    return (
+      <aside className="w-[56px] min-w-[56px] h-screen bg-[#0a0a0f] border-r border-[#2a2a3a] flex flex-col items-center py-4 gap-1">
+        {/* Logo icon */}
+        <div className="w-8 h-8 rounded-lg bg-[#c9a84c]/10 border border-[#c9a84c]/30 flex items-center justify-center mb-3">
+          <TreePine size={15} className="text-[#c9a84c]" />
+        </div>
+
+        {/* Nav icons */}
+        {navItems.map((item) => {
+          const isActive = location.pathname === item.path;
+          return (
+            <button
+              key={item.mode}
+              onClick={() => { setViewMode(item.mode); navigate(item.path); }}
+              title={item.label}
+              className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
+                isActive ? 'bg-[#1e1e28] text-[#c9a84c]' : 'text-[#5a5864] hover:bg-[#14141c] hover:text-[#e8e6e1]'
+              }`}
+            >
+              {item.icon}
+            </button>
+          );
+        })}
+
+        <div className="flex-1" />
+
+        {/* Expand button */}
+        <button
+          onClick={() => setCollapsed(false)}
+          className="w-10 h-10 rounded-lg flex items-center justify-center text-[#5a5864] hover:bg-[#14141c] hover:text-[#c9a84c] transition-all"
+          title="Ouvrir la sidebar"
+        >
+          <ChevronRight size={16} />
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside className="w-[280px] min-w-[280px] h-screen bg-[#0a0a0f] border-r border-[#2a2a3a] flex flex-col overflow-hidden">
-      {/* Logo */}
+      {/* Logo + collapse button */}
       <div className="px-5 py-5 border-b border-[#2a2a3a]">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-[#c9a84c]/10 border border-[#c9a84c]/30 flex items-center justify-center">
-            <TreePine size={16} className="text-[#c9a84c]" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[#c9a84c]/10 border border-[#c9a84c]/30 flex items-center justify-center">
+              <TreePine size={16} className="text-[#c9a84c]" />
+            </div>
+            <div>
+              <h1 className="text-[15px] font-semibold tracking-[0.12em] text-[#e8e6e1]" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+                GENEAGRAPH
+              </h1>
+              <p className="text-[10px] text-[#5a5864] tracking-[0.15em] uppercase">Généalogie</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-[15px] font-semibold tracking-[0.12em] text-[#e8e6e1]" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
-              GENEAGRAPH
-            </h1>
-            <p className="text-[10px] text-[#5a5864] tracking-[0.15em] uppercase">Généalogie</p>
-          </div>
+          <button
+            onClick={() => setCollapsed(true)}
+            className="w-7 h-7 rounded-md flex items-center justify-center text-[#5a5864] hover:bg-[#1e1e28] hover:text-[#c9a84c] transition-all"
+            title="Réduire la sidebar"
+          >
+            <ChevronLeft size={14} />
+          </button>
         </div>
       </div>
 
