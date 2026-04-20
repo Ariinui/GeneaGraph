@@ -277,6 +277,21 @@ export default function GraphCanvas() {
     
     const allHavePositions = layoutMode === 'physics' && visiblePersons.length > 0 && visiblePersons.every(p => savedPositions[p.id]);
 
+    // ── Calculate levels for hierarchical mode (most recent at bottom) ──────────
+    const nodeLevels: Record<string, number> = {};
+    if (layoutMode === 'hierarchical') {
+      const personDates = visiblePersons.map(p => {
+        const birthYear = p.birthDate ? parseInt(p.birthDate.match(/\d{4}/)?.[0] || '0') : 0;
+        const creationTime = parseInt(p.id.replace('p-', '')) || 0;
+        return { id: p.id, sortValue: birthYear || (creationTime / 100000000000) + 1900 };
+      });
+      
+      const sortedByDate = [...personDates].sort((a, b) => a.sortValue - b.sortValue);
+      sortedByDate.forEach((p, idx) => {
+        nodeLevels[p.id] = idx;
+      });
+    }
+
     // ── shared canvas for font-size pre-computation ───────────────────────────
     const measureCtx = document.createElement('canvas').getContext('2d')!;
 
@@ -310,6 +325,7 @@ export default function GraphCanvas() {
         size,
         x: savedPositions[p.id]?.x,
         y: savedPositions[p.id]?.y,
+        level: layoutMode === 'hierarchical' ? nodeLevels[p.id] : undefined,
         shape: 'custom' as const,
         ctxRenderer: ({ ctx, x, y, state: { selected, hover } }: any) => ({
           drawNode() {
@@ -421,14 +437,14 @@ export default function GraphCanvas() {
       layout: layoutMode === 'hierarchical' ? {
         hierarchical: { 
           direction: layoutDirection,
-          sortMethod: 'directed',
+          sortMethod: undefined,
           levelSeparation: layoutDirection === 'LR' || layoutDirection === 'RL' ? 220 : 160,
           nodeSpacing: layoutDirection === 'LR' || layoutDirection === 'RL' ? 120 : 180,
           treeSpacing: 260,
           blockShifting: true,
           edgeMinimization: true,
-          parentCentralization: true,
-          shakeTowards: 'leaves'
+          parentCentralization: false,
+          shakeTowards: 'roots'
         },
       } : {},
       interaction: {

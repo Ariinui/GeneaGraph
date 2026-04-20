@@ -8,6 +8,8 @@ import { computeBetweenness } from '@/utils/betweenness';
 const STORAGE_KEY = 'geneagraph:tree';
 const STORAGE_VERSION = 1;
 const CLOUD_ENABLED_KEY = 'geneagraph:cloudEnabled';
+const LAYOUT_MODE_KEY = 'geneagraph:layoutMode';
+const LAYOUT_DIRECTION_KEY = 'geneagraph:layoutDirection';
 
 const APPWRITE_CONFIGURED = import.meta.env.VITE_APPWRITE_PROJECT_ID && 
                              import.meta.env.VITE_APPWRITE_PROJECT_ID !== 'your-project-id-here';
@@ -209,8 +211,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
-  const [layoutMode, setLayoutMode] = useState<'physics' | 'hierarchical'>('physics');
-  const [layoutDirection, setLayoutDirection] = useState<LayoutDirection>('UD');
+  const [layoutMode, setLayoutModeState] = useState<'physics' | 'hierarchical'>(() => {
+    try {
+      const stored = localStorage.getItem(LAYOUT_MODE_KEY);
+      return stored === 'hierarchical' ? 'hierarchical' : 'physics';
+    } catch { return 'physics'; }
+  });
+  const [layoutDirection, setLayoutDirectionState] = useState<LayoutDirection>(() => {
+    try {
+      const stored = localStorage.getItem(LAYOUT_DIRECTION_KEY) as LayoutDirection | null;
+      return stored || 'UD';
+    } catch { return 'UD'; }
+  });
   const [hierarchyFocus, setHierarchyFocus] = useState<HierarchyFocus>('all');
   const [hierarchyRootId, setHierarchyRootId] = useState<string | null>(null);
   const [generationDepth, setGenerationDepth] = useState<number>(10);
@@ -269,6 +281,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setActiveBranchFilters((prev) =>
       prev.includes(branchId) ? prev.filter((b) => b !== branchId) : [...prev, branchId]
     );
+  }, []);
+
+  const setLayoutMode = useCallback((mode: 'physics' | 'hierarchical') => {
+    setLayoutModeState(mode);
+    try { localStorage.setItem(LAYOUT_MODE_KEY, mode); } catch {}
+  }, []);
+
+  const setLayoutDirection = useCallback((dir: LayoutDirection) => {
+    setLayoutDirectionState(dir);
+    try { localStorage.setItem(LAYOUT_DIRECTION_KEY, dir); } catch {}
   }, []);
 
   const togglePanel = useCallback(() => setPanelOpen((p) => !p), []);
