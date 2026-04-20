@@ -1,16 +1,12 @@
-import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router';
-import { TreePine, FileText, Database, GitBranch, Search, X, Trash2 } from 'lucide-react';
+import { TreePine, FileText, Database, GitBranch, Search, X } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import type { RelationType, ViewMode } from '@/types/genealogy';
-import type { Branch } from '@/types/genealogy';
 
-const navItems: { mode: ViewMode; path: string; label: string; icon: React.ReactNode }[] = [
-  { mode: 'tree',      path: '/',          label: 'Arbre',     icon: <TreePine size={18} /> },
-  { mode: 'report',    path: '/report',    label: 'Rapport',   icon: <FileText size={18} /> },
-  { mode: 'data',      path: '/data',      label: 'Données',   icon: <Database size={18} /> },
-  { mode: 'relations', path: '/relations', label: 'Relations', icon: <GitBranch size={18} /> },
+const navItems: { mode: ViewMode; label: string; icon: React.ReactNode }[] = [
+  { mode: 'tree', label: 'Arbre', icon: <TreePine size={18} /> },
+  { mode: 'report', label: 'Rapport', icon: <FileText size={18} /> },
+  { mode: 'data', label: 'Données', icon: <Database size={18} /> },
+  { mode: 'relations', label: 'Relations', icon: <GitBranch size={18} /> },
 ];
 
 const relationFilterConfig: { type: RelationType; label: string; color: string }[] = [
@@ -21,9 +17,8 @@ const relationFilterConfig: { type: RelationType; label: string; color: string }
 ];
 
 export default function Sidebar() {
-  const navigate = useNavigate();
-  const location = useLocation();
   const {
+    viewMode,
     setViewMode,
     activeFilters,
     toggleRelationFilter,
@@ -34,10 +29,7 @@ export default function Sidebar() {
     setSearchQuery,
     persons,
     relations,
-    deleteBranch,
   } = useApp();
-
-  const [branchToDelete, setBranchToDelete] = useState<Branch | null>(null);
 
   const allPersons = persons;
   const searchResults = searchQuery.length > 1
@@ -73,23 +65,20 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="px-3 py-4 space-y-1">
-        {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          return (
-            <button
-              key={item.mode}
-              onClick={() => { setViewMode(item.mode); navigate(item.path); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-all duration-200 ${
-                isActive
-                  ? 'bg-[#1e1e28] text-[#c9a84c] border-l-2 border-[#c9a84c]'
-                  : 'text-[#8a8894] hover:bg-[#14141c] hover:text-[#e8e6e1]'
-              }`}
-            >
-              {item.icon}
-              <span className="font-medium">{item.label}</span>
-            </button>
-          );
-        })}
+        {navItems.map((item) => (
+          <button
+            key={item.mode}
+            onClick={() => setViewMode(item.mode)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-all duration-200 ${
+              viewMode === item.mode
+                ? 'bg-[#1e1e28] text-[#c9a84c] border-l-2 border-[#c9a84c]'
+                : 'text-[#8a8894] hover:bg-[#14141c] hover:text-[#e8e6e1]'
+            }`}
+          >
+            {item.icon}
+            <span className="font-medium">{item.label}</span>
+          </button>
+        ))}
       </nav>
 
       <div className="mx-4 h-px bg-[#2a2a3a]" />
@@ -121,8 +110,8 @@ export default function Sidebar() {
                 key={p.id}
                 onClick={() => {
                   setViewMode('tree');
-                  navigate('/');
                   setSearchQuery('');
+                  // The graph will handle selection via a custom event
                   window.dispatchEvent(new CustomEvent('geneagraph:selectPerson', { detail: p.id }));
                 }}
                 className="w-full text-left px-3 py-2 text-[12px] text-[#e8e6e1] hover:bg-[#2a2a3a] transition-colors"
@@ -179,50 +168,24 @@ export default function Sidebar() {
           </h3>
           <div className="flex flex-wrap gap-1.5">
             {branches.map((branch) => (
-              <div key={branch.id} className="flex items-center gap-0.5 group">
-                <button
-                  onClick={() => toggleBranchFilter(branch.id)}
-                  className={`px-2.5 py-1 rounded-l-md text-[11px] font-medium transition-all duration-200 border-y border-l ${
-                    activeBranchFilters.includes(branch.id)
-                      ? 'border-transparent text-[#0a0a0f]'
-                      : 'border-[#2a2a3a] text-[#8a8894] hover:border-[#5a5864]'
-                  }`}
-                  style={activeBranchFilters.includes(branch.id) ? { backgroundColor: branch.color } : {}}
-                >
-                  {branch.name}
-                </button>
-                <button
-                  onClick={() => setBranchToDelete(branch)}
-                  className={`px-1 py-1 rounded-r-md text-[11px] transition-all duration-200 border-y border-r opacity-0 group-hover:opacity-100 ${
-                    activeBranchFilters.includes(branch.id)
-                      ? 'border-transparent text-[#0a0a0f] hover:bg-black/20'
-                      : 'border-[#2a2a3a] text-[#5a5864] hover:text-red-400 hover:border-red-900/50'
-                  }`}
-                  style={activeBranchFilters.includes(branch.id) ? { backgroundColor: branch.color } : {}}
-                  title="Supprimer la branche"
-                >
-                  <Trash2 size={10} />
-                </button>
-              </div>
+              <button
+                key={branch.id}
+                onClick={() => toggleBranchFilter(branch.id)}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-200 border ${
+                  activeBranchFilters.includes(branch.id)
+                    ? 'border-transparent text-[#0a0a0f]'
+                    : 'border-[#2a2a3a] text-[#8a8894] hover:border-[#5a5864]'
+                }`}
+                style={
+                  activeBranchFilters.includes(branch.id)
+                    ? { backgroundColor: branch.color }
+                    : { backgroundColor: 'transparent' }
+                }
+              >
+                {branch.name}
+              </button>
             ))}
           </div>
-
-          <AlertDialog open={!!branchToDelete} onOpenChange={open => { if (!open) setBranchToDelete(null); }}>
-            <AlertDialogContent className="bg-[#0f0f1a] border-[#2a2a3a] text-[#ede9e0]">
-              <AlertDialogHeader>
-                <AlertDialogTitle>Supprimer « {branchToDelete?.name} » ?</AlertDialogTitle>
-                <AlertDialogDescription className="text-[#8a8894]">
-                  Toutes les personnes de cette branche et leurs relations seront supprimées définitivement.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel className="border-[#2a2a3a] text-[#8a8894] hover:bg-[#1e1e28]">Annuler</AlertDialogCancel>
-                <AlertDialogAction onClick={() => { if (branchToDelete) { deleteBranch(branchToDelete.id); setBranchToDelete(null); } }} className="bg-red-700 hover:bg-red-600 text-white">
-                  Supprimer
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
         </div>
       )}
 

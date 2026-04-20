@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { useNavigate } from 'react-router';
 import { useApp } from '@/context/AppContext';
 import { Plus, Search, Pencil, Trash2, Link, AlertTriangle, RotateCcw, Upload, CheckCircle, XCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -73,6 +74,7 @@ function PersonForm({
 }
 
 export default function Data() {
+  const navigate = useNavigate();
   const {
     persons, relations, branches,
     addPerson, updatePerson, deletePerson,
@@ -166,6 +168,7 @@ export default function Data() {
     setGedcomError(null);
     setGedcomFileName('');
     setViewMode('tree');
+    navigate('/');
   };
 
   const getRelations = (id: string) =>
@@ -382,7 +385,7 @@ export default function Data() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <button onClick={() => { setSelectedPersonId(person.id); setViewMode('tree'); window.dispatchEvent(new CustomEvent('geneagraph:selectPerson', { detail: person.id })); }}
+                    <button onClick={() => { setSelectedPersonId(person.id); setViewMode('tree'); navigate('/'); window.dispatchEvent(new CustomEvent('geneagraph:selectPerson', { detail: person.id })); }}
                       className="text-[11px] text-[#c9a84c] hover:text-[#e0c97f] transition-colors">
                       Voir
                     </button>
