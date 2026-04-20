@@ -140,8 +140,8 @@ export default function Sidebar() {
         onClick={() => setCollapsed(true)}
       />
       
-      <aside className="w-[280px] min-w-[280px] h-screen bg-[#0a0a0f] border-r border-[#2a2a3a] flex flex-col overflow-hidden fixed md:relative z-50 md:z-auto">
-      <div className="px-5 py-5 border-b border-[#2a2a3a]">
+      <aside className="w-[280px] min-w-[280px] h-screen bg-[#0a0a0f] border-r border-[#2a2a3a] flex flex-col fixed md:relative z-50 md:z-auto">
+      <div className="px-5 py-5 border-b border-[#2a2a3a] flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-[#c9a84c]/10 border border-[#c9a84c]/30 flex items-center justify-center">
@@ -164,49 +164,50 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <nav className="px-3 py-4 space-y-1">
-        {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          return (
-            <button
-              key={item.mode}
-              onClick={() => { setViewMode(item.mode); navigate(item.path); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-all duration-200 cursor-pointer ${
-                isActive
-                  ? 'bg-[#1e1e28] text-[#c9a84c] border-l-2 border-[#c9a84c]'
-                  : 'text-[#8a8894] hover:bg-[#14141c] hover:text-[#e8e6e1]'
-              }`}
-            >
-              {item.icon}
-              <span className="font-medium">{item.label}</span>
-            </button>
-          );
-        })}
-      </nav>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
+        <nav className="px-3 py-4 space-y-1">
+          {navItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <button
+                key={item.mode}
+                onClick={() => { setViewMode(item.mode); navigate(item.path); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-all duration-200 cursor-pointer ${
+                  isActive
+                    ? 'bg-[#1e1e28] text-[#c9a84c] border-l-2 border-[#c9a84c]'
+                    : 'text-[#8a8894] hover:bg-[#14141c] hover:text-[#e8e6e1]'
+                }`}
+              >
+                {item.icon}
+                <span className="font-medium">{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
 
-      <div className="mx-4 h-px bg-[#2a2a3a]" />
+        <div className="mx-4 h-px bg-[#2a2a3a]" />
 
-      {/* Search */}
-      <div className="px-4 py-3 relative">
-        <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#5a5864]" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Rechercher une personne..."
-            className="w-full bg-[#14141c] border border-[#2a2a3a] rounded-lg pl-9 pr-8 py-2 text-[12px] text-[#e8e6e1] placeholder-[#5a5864] focus:outline-none focus:border-[#c9a84c]/50 transition-colors"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#5a5864] hover:text-[#e8e6e1]"
-            >
-              <X size={12} />
-            </button>
-          )}
-        </div>
-        {searchResults.length > 0 && (
+        {/* Search */}
+        <div className="px-4 py-3 relative">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#5a5864]" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Rechercher une personne..."
+              className="w-full bg-[#14141c] border border-[#2a2a3a] rounded-lg pl-9 pr-8 py-2 text-[12px] text-[#e8e6e1] placeholder-[#5a5864] focus:outline-none focus:border-[#c9a84c]/50 transition-colors"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#5a5864] hover:text-[#e8e6e1]"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+          {searchResults.length > 0 && (
           <div className="absolute left-4 right-4 top-[52px] bg-[#1e1e28] border border-[#2a2a3a] rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
             {searchResults.map((p) => (
               <button
@@ -356,9 +357,7 @@ export default function Sidebar() {
         </div>
       )}
 
-      <div className="flex-1" />
-
-      <div className="px-4 py-4 border-t border-[#2a2a3a]">
+      <div className="px-4 py-4 border-t border-[#2a2a3a] mt-auto">
         <h3 className="text-[10px] font-medium text-[#5a5864] uppercase tracking-[0.15em] mb-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
           Statistiques
         </h3>
@@ -384,6 +383,7 @@ export default function Sidebar() {
             <p className="text-[10px] text-[#5a5864] uppercase tracking-wide">Période</p>
           </div>
         </div>
+      </div>
       </div>
     </aside>
     </>

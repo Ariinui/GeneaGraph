@@ -34,7 +34,7 @@ function isEdgeOnPath(edge: Relation, path: string[]): boolean {
   return false;
 }
 
-const positionsKey = (mode: string) => `geneagraph:positions:${mode}`;
+const positionsKey = (mode: string) => `geneagraph:positions:${mode}:v3`;
 
 // ── Global position cache that persists across network recreations ─────────────
 const globalPositionsCache = new Map<string, Record<string, { x: number; y: number }>>();
@@ -477,7 +477,9 @@ export default function GraphCanvas() {
         arrows: (r.type === 'parent' || r.type === 'adoption' || r.type === 'tutelle')
           ? { to: { enabled: true, scaleFactor: 0.45 } } : undefined,
         font: { color: '#6a6874', size: 9, face: 'Outfit, system-ui, sans-serif', background: 'rgba(10,10,15,0.85)', strokeWidth: 0 },
-        smooth: { enabled: true, type: 'continuous' as const, roundness: 0.15 },
+        smooth: (layoutMode === 'hierarchical'
+          ? { enabled: false }
+          : { enabled: true, type: 'dynamic' }) as any,
       };
     });
 
@@ -499,13 +501,13 @@ export default function GraphCanvas() {
         hierarchical: {
           direction: layoutDirection,
           sortMethod: 'directed',
-          levelSeparation: layoutDirection === 'LR' || layoutDirection === 'RL' ? 280 : 200,
-          nodeSpacing: layoutDirection === 'LR' || layoutDirection === 'RL' ? 100 : 220,
-          treeSpacing: 300,
+          levelSeparation: layoutDirection === 'LR' || layoutDirection === 'RL' ? 240 : 180,
+          nodeSpacing: 110,
+          treeSpacing: 200,
           blockShifting: true,
           edgeMinimization: true,
           parentCentralization: true,
-          shakeTowards: 'roots'
+          shakeTowards: 'roots',
         },
       } : {},
       interaction: {
@@ -572,7 +574,15 @@ export default function GraphCanvas() {
       setTimeout(() => {
         if (!destroyed) {
           const restored = restoreViewport(true);
-          if (!restored) network.fit({ animation: { duration: 600, easingFunction: 'easeOutQuart' } });
+          if (!restored) {
+            network.fit({ animation: false });
+            const scale = network.getScale();
+            // Enforce minimum zoom so nodes stay readable
+            network.moveTo({
+              scale: Math.max(scale, 0.45),
+              animation: { duration: 600, easingFunction: 'easeOutQuart' },
+            });
+          }
           saveState();
         }
       }, 450);

@@ -197,3 +197,17 @@ div.vis-tooltip {
     min-width: 44px;
   }
 }
+
+/* Sidebar scrollbar - always visible on mobile */
+@media (max-width: 768px) {
+  .custom-scrollbar::-webkit-scrollbar { 
+    width: 6px; 
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb { 
+    background: rgba(201,168,76,0.4); 
+    border-radius: 99px; 
+  }
+  .custom-scrollbar {
+    -webkit-overflow-scrolling: touch;
+  }
+}
