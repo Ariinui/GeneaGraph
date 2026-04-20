@@ -356,8 +356,9 @@ export default function Sidebar() {
           </AlertDialog>
         </div>
       )}
+      </div>
 
-      <div className="px-4 py-4 border-t border-[#2a2a3a] mt-auto">
+      <div className="px-4 py-4 border-t border-[#2a2a3a] flex-shrink-0">
         <h3 className="text-[10px] font-medium text-[#5a5864] uppercase tracking-[0.15em] mb-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
           Statistiques
         </h3>
@@ -383,7 +384,6 @@ export default function Sidebar() {
             <p className="text-[10px] text-[#5a5864] uppercase tracking-wide">Période</p>
           </div>
         </div>
-      </div>
       </div>
     </aside>
     </>
