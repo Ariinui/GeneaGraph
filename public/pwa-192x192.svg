@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f4d03f"/>
+      <stop offset="100%" style="stop-color:#d4a017"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="24" fill="url(#bg)"/>
+  <circle cx="96" cy="45" r="15" fill="url(#gold)"/>
+  <circle cx="45" cy="96" r="12" fill="#4a90a4"/>
+  <circle cx="147" cy="96" r="12" fill="#4a90a4"/>
+  <circle cx="68" cy="147" r="10" fill="#6b8e6b"/>
+  <circle cx="124" cy="147" r="10" fill="#6b8e6b"/>
+  <line x1="96" y1="60" x2="45" y2="84" stroke="#4a90a4" stroke-width="2"/>
+  <line x1="96" y1="60" x2="147" y2="84" stroke="#4a90a4" stroke-width="2"/>
+  <line x1="45" y1="108" x2="68" y2="137" stroke="#6b8e6b" stroke-width="1.5"/>
+  <line x1="147" y1="108" x2="124" y2="137" stroke="#6b8e6b" stroke-width="1.5"/>
+</svg>

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f4d03f"/>
+      <stop offset="100%" style="stop-color:#d4a017"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="64" fill="url(#bg)"/>
+  <circle cx="256" cy="120" r="40" fill="url(#gold)"/>
+  <circle cx="120" cy="256" r="32" fill="#4a90a4"/>
+  <circle cx="392" cy="256" r="32" fill="#4a90a4"/>
+  <circle cx="180" cy="392" r="28" fill="#6b8e6b"/>
+  <circle cx="332" cy="392" r="28" fill="#6b8e6b"/>
+  <line x1="256" y1="160" x2="120" y2="224" stroke="#4a90a4" stroke-width="4"/>
+  <line x1="256" y1="160" x2="392" y2="224" stroke="#4a90a4" stroke-width="4"/>
+  <line x1="120" y1="288" x2="180" y2="364" stroke="#6b8e6b" stroke-width="3"/>
+  <line x1="392" y1="288" x2="332" y2="364" stroke="#6b8e6b" stroke-width="3"/>
+</svg>

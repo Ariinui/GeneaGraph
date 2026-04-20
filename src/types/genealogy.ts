@@ -51,4 +51,4 @@ export interface TreeData {
   treeName: string;
 }
 
-export type ViewMode = 'tree' | 'report' | 'data' | 'relations';
+export type ViewMode = 'tree' | 'report' | 'data' | 'relations' | 'analytics';

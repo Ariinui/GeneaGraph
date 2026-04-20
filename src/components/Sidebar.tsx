@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
-import { TreePine, FileText, Database, GitBranch, Search, X, Trash2, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+import { TreePine, FileText, Database, GitBranch, Search, X, Trash2, ChevronLeft, ChevronRight, Clock, BarChart3 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import type { RelationType, ViewMode } from '@/types/genealogy';
@@ -11,6 +11,7 @@ const navItems: { mode: ViewMode; path: string; label: string; icon: React.React
   { mode: 'report',    path: '/report',    label: 'Rapport',   icon: <FileText size={18} /> },
   { mode: 'data',      path: '/data',      label: 'Données',   icon: <Database size={18} /> },
   { mode: 'relations', path: '/relations', label: 'Relations', icon: <GitBranch size={18} /> },
+  { mode: 'analytics', path: '/analytics', label: 'Analyse',   icon: <BarChart3 size={18} /> },
 ];
 
 const relationFilterConfig: { type: RelationType; label: string; color: string }[] = [

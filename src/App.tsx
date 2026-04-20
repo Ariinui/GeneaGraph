@@ -4,6 +4,7 @@ import Home from '@/pages/Home';
 import Report from '@/pages/Report';
 import Data from '@/pages/Data';
 import Relations from '@/pages/Relations';
+import Analytics from '@/pages/Analytics';
 import MainLayout from '@/components/MainLayout';
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
           <Route path="/report" element={<Report />} />
           <Route path="/data" element={<Data />} />
           <Route path="/relations" element={<Relations />} />
+          <Route path="/analytics" element={<Analytics />} />
         </Route>
       </Routes>
     </AppProvider>
