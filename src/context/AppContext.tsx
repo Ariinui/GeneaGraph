@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import type { Person, Relation, Source, Branch, ViewMode, RelationType } from '@/types/genealogy';
 import { getSampleData, BRANCH_COLORS } from '@/data/sampleData';
+import type { ParsedPerson, ParsedRelation } from '@/utils/gedcomParser';
 
 const STORAGE_KEY = 'geneagraph:tree';
 const STORAGE_VERSION = 1;
@@ -96,6 +97,7 @@ interface AppContextType extends AppState {
   deleteRelation: (id: string) => void;
   clearAll: () => void;
   deleteBranch: (branchId: string) => void;
+  importData: (persons: ParsedPerson[], relations: ParsedRelation[], mode: 'replace' | 'merge') => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -248,6 +250,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setRelations([]);
   }, []);
 
+  const importData = useCallback((
+    rawPersons: ParsedPerson[],
+    rawRelations: ParsedRelation[],
+    mode: 'replace' | 'merge'
+  ) => {
+    const now = Date.now();
+    const idMap = new Map<string, string>();
+
+    const newPersons: Person[] = rawPersons.map((p, i) => {
+      const id = `p-${now}-${i}`;
+      idMap.set(p._gedId, id);
+      const { _gedId, ...rest } = p;
+      return { ...rest, id };
+    });
+
+    const newRelations: Relation[] = rawRelations
+      .filter(r => idMap.has(r.from) && idMap.has(r.to))
+      .map((r, i) => ({
+        id: `r-${now}-${i}`,
+        from: idMap.get(r.from)!,
+        to: idMap.get(r.to)!,
+        type: r.type,
+      }));
+
+    if (mode === 'replace') {
+      const merged = buildPersonsWithBranches(newPersons, newRelations);
+      setPersons(merged);
+      setRelations(newRelations);
+    } else {
+      setPersons(prev => {
+        const all = [...prev, ...newPersons];
+        return buildPersonsWithBranches(all, [...relations, ...newRelations]);
+      });
+      setRelations(prev => [...prev, ...newRelations]);
+    }
+  }, [relations]);
+
   const resetTree = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
     const sd = getSampleData();
@@ -361,6 +400,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     deleteRelation,
     clearAll,
     deleteBranch,
+    importData,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

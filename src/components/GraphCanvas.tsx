@@ -6,7 +6,7 @@ import { useApp } from '@/context/AppContext';
 import type { Person } from '@/types/genealogy';
 import type { Relation } from '@/types/genealogy';
 
-const LABEL_VADJUST_BASE = 18;
+const LABEL_VADJUST_BASE = 30;
 
 export default function GraphCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -76,7 +76,7 @@ export default function GraphCanvas() {
 
     const nodesData = visiblePersons.map((p) => {
       const degree = degreeMap.get(p.id) || 0;
-      const size = Math.max(22, Math.min(38, 22 + degree * 2.5));
+      const size = Math.max(26, Math.min(44, 26 + degree * 3));
       const isSelected = p.id === selectedPersonId;
       const isHighlighted = highlightedPath?.includes(p.id);
       const isMale = p.gender === 'M';
@@ -103,11 +103,11 @@ export default function GraphCanvas() {
         },
         borderWidth: isSelected || isHighlighted ? 3 : 2,
         font: {
-          color: '#e8e6e1',
-          size: 11,
+          color: '#d8d6d1',
+          size: 13,
           face: 'Inter, system-ui, sans-serif',
           vadjust: size + LABEL_VADJUST_BASE,
-          bold: { color: '#ffffff', size: 11 },
+          bold: { color: '#ffffff', size: 13 },
         },
         shape: 'dot' as const,
         shadow: isSelected
@@ -163,7 +163,7 @@ export default function GraphCanvas() {
       nodes: {
         borderWidthSelected: 3,
         chosen: true,
-        scaling: { min: 22, max: 38 },
+        scaling: { min: 26, max: 44 },
       },
       edges: {
         chosen: true,

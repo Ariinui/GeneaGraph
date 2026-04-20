@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
-import { Plus, Search, Pencil, Trash2, Link, AlertTriangle, RotateCcw } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Link, AlertTriangle, RotateCcw, Upload, CheckCircle, XCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Person, RelationType } from '@/types/genealogy';
+import { parseGedcom } from '@/utils/gedcomParser';
+import type { GedcomParseResult } from '@/utils/gedcomParser';
 
 const EMPTY_PERSON: Partial<Person> = { gender: 'M' };
 
@@ -76,6 +78,7 @@ export default function Data() {
     addPerson, updatePerson, deletePerson,
     addRelation, deleteRelation,
     clearAll, resetTree,
+    importData,
     setSelectedPersonId, setViewMode,
   } = useApp();
 
@@ -88,6 +91,12 @@ export default function Data() {
   const [relFrom, setRelFrom]               = useState('');
   const [relTo, setRelTo]                   = useState('');
   const [relType, setRelType]               = useState<RelationType>('parent');
+
+  // GEDCOM import state
+  const fileInputRef                         = useRef<HTMLInputElement>(null);
+  const [gedcomResult, setGedcomResult]      = useState<GedcomParseResult | null>(null);
+  const [gedcomError, setGedcomError]        = useState<string | null>(null);
+  const [gedcomFileName, setGedcomFileName]  = useState('');
 
   const filtered = persons.filter(p =>
     `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
@@ -121,6 +130,42 @@ export default function Data() {
     addRelation({ from: relFrom, to: relTo, type: relType });
     setShowAddRelation(false);
     setRelFrom(''); setRelTo(''); setRelType('parent');
+  };
+
+  /* ── GEDCOM import ── */
+  const handleGedcomFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setGedcomFileName(file.name);
+    setGedcomError(null);
+    setGedcomResult(null);
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const content = ev.target?.result as string;
+        if (!content.trim()) throw new Error('Fichier vide');
+        const result = parseGedcom(content);
+        if (result.persons.length === 0) throw new Error('Aucune personne trouvée dans ce fichier GEDCOM');
+        setGedcomResult(result);
+      } catch (err: any) {
+        setGedcomError(err.message || 'Erreur de lecture du fichier');
+      }
+    };
+    reader.onerror = () => setGedcomError('Impossible de lire le fichier');
+    reader.readAsText(file, 'UTF-8');
+
+    // Reset input so same file can be re-selected
+    e.target.value = '';
+  };
+
+  const handleGedcomImport = (mode: 'replace' | 'merge') => {
+    if (!gedcomResult) return;
+    importData(gedcomResult.persons, gedcomResult.relations, mode);
+    setGedcomResult(null);
+    setGedcomError(null);
+    setGedcomFileName('');
+    setViewMode('tree');
   };
 
   const getRelations = (id: string) =>
@@ -158,6 +203,22 @@ export default function Data() {
               className="bg-[#14141c] border border-[#2a2a3a] rounded-lg pl-9 pr-4 py-2 text-[12px] text-[#ede9e0] placeholder-[#5a5864] focus:outline-none focus:border-[#c9a84c]/50 w-48"
             />
           </div>
+
+          {/* GEDCOM Import */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".ged,.gedcom"
+            onChange={handleGedcomFile}
+            className="hidden"
+          />
+          <Button
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            className="border-[#c9a84c]/30 text-[#c9a84c] hover:bg-[#c9a84c]/10 hover:border-[#c9a84c]/60 text-[12px]"
+          >
+            <Upload size={14} className="mr-1.5" /> Importer GEDCOM
+          </Button>
 
           {/* Add Person */}
           <Dialog open={showAdd} onOpenChange={setShowAdd}>
@@ -421,6 +482,93 @@ export default function Data() {
           </div>
         </div>
       )}
+
+      {/* GEDCOM preview / confirm dialog */}
+      <Dialog
+        open={!!gedcomResult || !!gedcomError}
+        onOpenChange={(open) => { if (!open) { setGedcomResult(null); setGedcomError(null); } }}
+      >
+        <DialogContent className="bg-[#0f0f1a] border-[#2a2a3a] text-[#ede9e0] max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ fontFamily: 'Cormorant Garamond, serif' }} className="text-[18px]">
+              Importer un fichier GEDCOM
+            </DialogTitle>
+          </DialogHeader>
+
+          {gedcomError && (
+            <div className="flex items-start gap-3 bg-red-900/20 border border-red-900/40 rounded-lg p-4">
+              <XCircle size={18} className="text-red-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[13px] font-medium text-red-300">Erreur de lecture</p>
+                <p className="text-[12px] text-red-400/80 mt-1">{gedcomError}</p>
+              </div>
+            </div>
+          )}
+
+          {gedcomResult && (
+            <>
+              <div className="flex items-start gap-3 bg-[#14141c] border border-[#2a2a3a] rounded-lg p-4">
+                <CheckCircle size={18} className="text-emerald-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[13px] font-medium text-[#e8e6e1]">Fichier analysé avec succès</p>
+                  <p className="text-[11px] text-[#5a5864] mt-0.5">{gedcomFileName}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { value: gedcomResult.stats.individuals, label: 'Personnes', color: '#4a9eff' },
+                  { value: gedcomResult.stats.families, label: 'Familles', color: '#c9a84c' },
+                  { value: gedcomResult.stats.relationsCreated, label: 'Relations', color: '#10b981' },
+                ].map(({ value, label, color }) => (
+                  <div key={label} className="bg-[#0a0a12] border border-[#1e1e28] rounded-lg p-3 text-center">
+                    <p className="text-[22px] font-semibold" style={{ color, fontFamily: 'Cormorant Garamond, serif' }}>{value}</p>
+                    <p className="text-[10px] text-[#5a5864] uppercase tracking-wider mt-0.5">{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {gedcomResult.stats.skippedRelations > 0 && (
+                <p className="text-[11px] text-[#5a5864] flex items-center gap-1.5">
+                  <AlertTriangle size={12} className="text-amber-500/70" />
+                  {gedcomResult.stats.skippedRelations} relation(s) ignorée(s) — références manquantes
+                </p>
+              )}
+
+              <div className="space-y-2 pt-1">
+                <p className="text-[11px] text-[#8a8894] font-medium uppercase tracking-wider">Mode d'importation</p>
+                <button
+                  onClick={() => handleGedcomImport('replace')}
+                  className="w-full flex items-start gap-3 p-3.5 rounded-lg border border-[#c9a84c]/30 hover:border-[#c9a84c]/60 hover:bg-[#c9a84c]/5 transition-all text-left group"
+                >
+                  <div className="w-4 h-4 rounded-full border-2 border-[#c9a84c] flex-shrink-0 mt-0.5 group-hover:bg-[#c9a84c]/20 transition-colors" />
+                  <div>
+                    <p className="text-[13px] font-medium text-[#e8e6e1]">Remplacer tout</p>
+                    <p className="text-[11px] text-[#5a5864] mt-0.5">Efface les données actuelles et importe le fichier GEDCOM</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => handleGedcomImport('merge')}
+                  className="w-full flex items-start gap-3 p-3.5 rounded-lg border border-[#2a2a3a] hover:border-[#4a4a5a] hover:bg-[#14141c] transition-all text-left group"
+                >
+                  <div className="w-4 h-4 rounded-full border-2 border-[#4a4a5a] flex-shrink-0 mt-0.5 group-hover:border-[#8a8894] transition-colors" />
+                  <div>
+                    <p className="text-[13px] font-medium text-[#e8e6e1]">Fusionner</p>
+                    <p className="text-[11px] text-[#5a5864] mt-0.5">Ajoute les personnes du GEDCOM à l'arbre existant</p>
+                  </div>
+                </button>
+              </div>
+
+              <button
+                onClick={() => { setGedcomResult(null); setGedcomError(null); }}
+                className="text-[12px] text-[#5a5864] hover:text-[#8a8894] transition-colors text-center w-full pt-1"
+              >
+                Annuler
+              </button>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Edit dialog */}
       <Dialog open={!!editTarget} onOpenChange={open => { if (!open) setEditTarget(null); }}>
