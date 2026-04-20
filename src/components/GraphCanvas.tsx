@@ -1,14 +1,20 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { Network, DataSet } from 'vis-network/standalone';
+import { Plus } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useApp } from '@/context/AppContext';
 import type { Person } from '@/types/genealogy';
 import type { Relation } from '@/types/genealogy';
+
+const LABEL_VADJUST_BASE = 18;
 
 export default function GraphCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
   const nodesRef = useRef<DataSet<any> | null>(null);
   const edgesRef = useRef<DataSet<any> | null>(null);
+  const quickAddTriggerRef = useRef<(() => void) | null>(null);
+
   const {
     persons,
     relations,
@@ -21,7 +27,16 @@ export default function GraphCanvas() {
     activeBranchFilters,
     setHoveredPersonId,
     highlightedPath,
+    addPerson,
   } = useApp();
+
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickForm, setQuickForm] = useState({ firstName: '', lastName: '', gender: 'M' as 'M' | 'F' });
+
+  quickAddTriggerRef.current = () => {
+    setQuickForm({ firstName: '', lastName: '', gender: 'M' });
+    setQuickAddOpen(true);
+  };
 
   const branchColorMap = new Map<string, string>();
   branches.forEach((b) => branchColorMap.set(b.id, b.color));
@@ -61,41 +76,50 @@ export default function GraphCanvas() {
 
     const nodesData = visiblePersons.map((p) => {
       const degree = degreeMap.get(p.id) || 0;
-      const size = Math.max(20, Math.min(40, 20 + degree * 3));
-      const branchColor = p.branch ? branchColorMap.get(p.branch) || '#c9a84c' : '#8a8894';
+      const size = Math.max(22, Math.min(38, 22 + degree * 2.5));
       const isSelected = p.id === selectedPersonId;
       const isHighlighted = highlightedPath?.includes(p.id);
+      const isMale = p.gender === 'M';
+
+      const borderColor = isHighlighted
+        ? '#c9a84c'
+        : isMale
+        ? '#4a9eff'
+        : '#f472b6';
+
+      const bgColor = isSelected
+        ? (isMale ? '#1a2d4a' : '#3a1030')
+        : (isMale ? '#0f1c2e' : '#200e1e');
 
       return {
         id: p.id,
         label: `${p.firstName}\n${p.lastName}`,
         size,
         color: {
-          background: isSelected ? '#1e1e28' : '#14141c',
-          border: isHighlighted ? '#c9a84c' : p.gender === 'M' ? '#4a9eff' : '#f43f5e',
-          highlight: { background: '#1e1e28', border: '#c9a84c' },
-          hover: { background: '#1e1e28', border: '#c9a84c' },
+          background: bgColor,
+          border: borderColor,
+          highlight: { background: isMale ? '#1a2d4a' : '#3a1030', border: '#c9a84c' },
+          hover: { background: isMale ? '#152439' : '#2d1028', border: '#c9a84c' },
         },
         borderWidth: isSelected || isHighlighted ? 3 : 2,
         font: {
           color: '#e8e6e1',
           size: 11,
-          face: 'JetBrains Mono',
-          multi: 'html',
+          face: 'Inter, system-ui, sans-serif',
+          vadjust: size + LABEL_VADJUST_BASE,
+          bold: { color: '#ffffff', size: 11 },
         },
         shape: 'dot' as const,
         shadow: isSelected
-          ? { enabled: true, color: 'rgba(201,168,76,0.4)', size: 20 }
-          : { enabled: false },
-        title: buildTooltip(p, branchColor),
+          ? { enabled: true, color: 'rgba(201,168,76,0.5)', size: 16, x: 0, y: 0 }
+          : { enabled: true, color: 'rgba(0,0,0,0.6)', size: 8, x: 0, y: 3 },
+        title: buildTooltip(p),
       };
     });
 
     const edgesData = filteredRelations.map((r) => {
       const color = getRelationColor(r.type);
-      const isPathEdge = highlightedPath
-        ? isEdgeOnPath(r, highlightedPath)
-        : false;
+      const isPathEdge = highlightedPath ? isEdgeOnPath(r, highlightedPath) : false;
 
       return {
         id: r.id,
@@ -106,22 +130,27 @@ export default function GraphCanvas() {
           color: isPathEdge ? '#c9a84c' : color,
           highlight: '#c9a84c',
           hover: '#e0c97f',
-          opacity: isPathEdge ? 1 : 0.8,
+          opacity: isPathEdge ? 1 : 0.75,
         },
         width: isPathEdge ? 3 : 1.5,
-        dashes: r.type === 'parent' ? [8, 4] : r.type === 'witness' ? [3, 3] : r.type === 'godparent' ? [10, 3, 3, 3] : false,
-        arrows: r.type === 'parent' ? { to: { enabled: true, scaleFactor: 0.5 } } : undefined,
+        dashes: r.type === 'parent'
+          ? [8, 4]
+          : r.type === 'witness'
+          ? [3, 3]
+          : r.type === 'godparent'
+          ? [10, 3, 3, 3]
+          : false,
+        arrows: r.type === 'parent'
+          ? { to: { enabled: true, scaleFactor: 0.45 } }
+          : undefined,
         font: {
-          color: '#8a8894',
+          color: '#6a6874',
           size: 9,
-          face: 'JetBrains Mono',
-          background: '#0a0a0f',
+          face: 'Inter, system-ui, sans-serif',
+          background: 'rgba(10,10,15,0.85)',
+          strokeWidth: 0,
         },
-        smooth: {
-          enabled: true,
-          type: 'continuous' as const,
-          roundness: 0.2,
-        },
+        smooth: { enabled: true, type: 'continuous' as const, roundness: 0.15 },
       };
     });
 
@@ -132,9 +161,9 @@ export default function GraphCanvas() {
 
     const options: any = {
       nodes: {
-        borderWidth: 2,
         borderWidthSelected: 3,
         chosen: true,
+        scaling: { min: 22, max: 38 },
       },
       edges: {
         chosen: true,
@@ -143,18 +172,20 @@ export default function GraphCanvas() {
       physics: layoutMode === 'physics'
         ? {
             enabled: true,
-            solver: 'forceAtlas2Based',
-            forceAtlas2Based: {
-              gravitationalConstant: -2000,
-              centralGravity: 0.3,
-              springLength: 150,
-              springConstant: 0.04,
-              damping: 0.9,
+            solver: 'barnesHut',
+            barnesHut: {
+              gravitationalConstant: -7000,
+              centralGravity: 0.15,
+              springLength: 260,
+              springConstant: 0.035,
+              damping: 0.92,
+              avoidOverlap: 0.85,
             },
             stabilization: {
               enabled: true,
-              iterations: 200,
-              updateInterval: 25,
+              iterations: 250,
+              updateInterval: 15,
+              fit: true,
             },
           }
         : false,
@@ -163,9 +194,9 @@ export default function GraphCanvas() {
             hierarchical: {
               direction: 'UD',
               sortMethod: 'directed',
-              levelSeparation: 120,
-              nodeSpacing: 150,
-              treeSpacing: 200,
+              levelSeparation: 150,
+              nodeSpacing: 200,
+              treeSpacing: 240,
               blockShifting: true,
               edgeMinimization: true,
               parentCentralization: true,
@@ -174,13 +205,14 @@ export default function GraphCanvas() {
         : {},
       interaction: {
         hover: true,
-        tooltipDelay: 100,
+        tooltipDelay: 150,
         hideEdgesOnDrag: false,
         navigationButtons: false,
         keyboard: false,
         zoomView: true,
         dragView: true,
-        multiselect: true,
+        multiselect: false,
+        zoomSpeed: 0.6,
       },
     };
 
@@ -189,39 +221,36 @@ export default function GraphCanvas() {
 
     network.once('stabilizationIterationsDone', () => {
       network.setOptions({ physics: false });
+      network.fit({ animation: { duration: 600, easingFunction: 'easeOutQuart' } });
     });
 
     network.on('click', (params: any) => {
-      if (params.nodes && params.nodes.length > 0) {
+      if (params.nodes?.length > 0) {
         setSelectedPersonId(params.nodes[0]);
       } else {
         setSelectedPersonId(null);
       }
     });
 
-    network.on('hoverNode', (params: any) => {
-      setHoveredPersonId(params.node);
-    });
-
-    network.on('blurNode', () => {
-      setHoveredPersonId(null);
-    });
+    network.on('hoverNode', (params: any) => setHoveredPersonId(params.node));
+    network.on('blurNode', () => setHoveredPersonId(null));
 
     network.on('doubleClick', (params: any) => {
-      if (params.nodes && params.nodes.length > 0) {
+      if (params.nodes?.length > 0) {
         network.focus(params.nodes[0], {
-          scale: 1.5,
+          scale: 1.6,
           animation: { duration: 500, easingFunction: 'easeOutQuart' },
         });
+      } else {
+        quickAddTriggerRef.current?.();
       }
     });
 
     const handleSelectPerson = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      const personId = customEvent.detail;
+      const personId = (e as CustomEvent).detail;
       setSelectedPersonId(personId);
       network.focus(personId, {
-        scale: 1.2,
+        scale: 1.3,
         animation: { duration: 500, easingFunction: 'easeOutQuart' },
       });
     };
@@ -247,7 +276,7 @@ export default function GraphCanvas() {
     return cleanup;
   }, [createNetwork]);
 
-  // Highlight neighbors when selected
+  // Highlight/dim neighbors on selection
   useEffect(() => {
     const nodes = nodesRef.current;
     const edges = edgesRef.current;
@@ -256,90 +285,76 @@ export default function GraphCanvas() {
 
     try {
       if (selectedPersonId) {
-        const connectedNodes = network.getConnectedNodes(selectedPersonId) as string[];
-        const allNodeIds = visiblePersons.map((p) => p.id);
-        const unconnectedNodes = allNodeIds.filter(
-          (id) => id !== selectedPersonId && !connectedNodes.includes(id)
-        );
+        const connected = network.getConnectedNodes(selectedPersonId) as string[];
+        const allIds = visiblePersons.map((p) => p.id);
+        const dimmed = allIds.filter((id) => id !== selectedPersonId && !connected.includes(id));
 
-        const nodeUpdates = unconnectedNodes.map((id) => ({
+        nodes.update(dimmed.map((id) => ({
           id,
-          color: { background: '#14141c', border: '#2a2a3a' },
-          font: { color: '#5a5864' },
-        }));
-        nodes.update(nodeUpdates);
+          color: { background: '#0a0a0f', border: '#2a2a3a' },
+          font: { color: '#3a3844' },
+        })));
 
-        const allEdgeIds = edges.getIds();
-        const connectedEdgeIds = network.getConnectedEdges(selectedPersonId);
-        const unconnectedEdgeIds = allEdgeIds.filter(
-          (id: string | number) => !connectedEdgeIds.includes(id as string)
-        );
-        edges.update(
-          unconnectedEdgeIds.map((id: string | number) => ({
-            id,
-            color: { opacity: 0.15 },
-          }))
-        );
+        const connectedEdges = network.getConnectedEdges(selectedPersonId);
+        const dimmedEdges = edges.getIds().filter((id: any) => !connectedEdges.includes(id));
+        edges.update(dimmedEdges.map((id: any) => ({ id, color: { opacity: 0.1 } })));
       } else {
-        const allNodes = visiblePersons.map((p) => ({
+        nodes.update(visiblePersons.map((p) => ({
           id: p.id,
           color: {
-            background: '#14141c',
-            border: p.gender === 'M' ? '#4a9eff' : '#f43f5e',
+            background: p.gender === 'M' ? '#0f1c2e' : '#200e1e',
+            border: p.gender === 'M' ? '#4a9eff' : '#f472b6',
           },
           font: { color: '#e8e6e1' },
-        }));
-        nodes.update(allNodes);
-
-        const allEdges = filteredRelations.map((r) => ({
+        })));
+        edges.update(filteredRelations.map((r) => ({
           id: r.id,
-          color: { opacity: 0.8, color: getRelationColor(r.type) },
-        }));
-        edges.update(allEdges);
+          color: { opacity: 0.75, color: getRelationColor(r.type) },
+        })));
       }
-    } catch {
-      // Network might be destroyed
-    }
+    } catch { /* network may be unmounted */ }
   }, [selectedPersonId, visiblePersons, filteredRelations]);
+
+  const handleQuickAdd = () => {
+    if (!quickForm.firstName.trim()) return;
+    addPerson({
+      firstName: quickForm.firstName.trim(),
+      lastName: quickForm.lastName.trim(),
+      gender: quickForm.gender,
+    });
+    setQuickAddOpen(false);
+  };
 
   return (
     <div className="relative flex-1 h-screen bg-[#0a0a0f] overflow-hidden">
       <div
         ref={containerRef}
         className="w-full h-full"
-        style={{ background: '#0a0a0f', cursor: 'crosshair' }}
+        style={{ background: '#080810' }}
       />
 
       {/* HUD Controls */}
       <div className="absolute top-4 left-4 flex items-center gap-2">
         <div className="bg-[#14141c]/90 backdrop-blur-sm border border-[#2a2a3a] rounded-lg p-1 flex items-center gap-1">
           <button
-            onClick={() => {
-              networkRef.current?.fit({
-                animation: { duration: 500, easingFunction: 'easeOutQuart' },
-              });
-            }}
+            onClick={() => networkRef.current?.fit({ animation: { duration: 500, easingFunction: 'easeOutQuart' } })}
             className="p-2 rounded-md text-[#8a8894] hover:text-[#e8e6e1] hover:bg-[#1e1e28] transition-colors"
             title="Réinitialiser la vue"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <circle cx="12" cy="12" r="3" />
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="3" />
             </svg>
           </button>
           <div className="w-px h-4 bg-[#2a2a3a]" />
           <button
             onClick={() => {
-              if (!document.fullscreenElement) {
-                containerRef.current?.requestFullscreen();
-              } else {
-                document.exitFullscreen();
-              }
+              if (!document.fullscreenElement) containerRef.current?.requestFullscreen();
+              else document.exitFullscreen();
             }}
             className="p-2 rounded-md text-[#8a8894] hover:text-[#e8e6e1] hover:bg-[#1e1e28] transition-colors"
             title="Plein écran"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
             </svg>
           </button>
@@ -348,51 +363,132 @@ export default function GraphCanvas() {
         <div className="bg-[#14141c]/90 backdrop-blur-sm border border-[#2a2a3a] rounded-lg p-1 flex items-center">
           <button
             onClick={() => setLayoutMode('physics')}
-            className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-all ${
-              layoutMode === 'physics'
-                ? 'bg-[#c9a84c] text-[#0a0a0f]'
-                : 'text-[#8a8894] hover:text-[#e8e6e1]'
-            }`}
+            className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-all ${layoutMode === 'physics' ? 'bg-[#c9a84c] text-[#0a0a0f]' : 'text-[#8a8894] hover:text-[#e8e6e1]'}`}
           >
             Réseau
           </button>
           <button
             onClick={() => setLayoutMode('hierarchical')}
-            className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-all ${
-              layoutMode === 'hierarchical'
-                ? 'bg-[#c9a84c] text-[#0a0a0f]'
-                : 'text-[#8a8894] hover:text-[#e8e6e1]'
-            }`}
+            className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-all ${layoutMode === 'hierarchical' ? 'bg-[#c9a84c] text-[#0a0a0f]' : 'text-[#8a8894] hover:text-[#e8e6e1]'}`}
           >
             Hiérarchie
           </button>
         </div>
+
+        {/* Add person button */}
+        <button
+          onClick={() => quickAddTriggerRef.current?.()}
+          className="bg-[#c9a84c]/10 hover:bg-[#c9a84c]/20 border border-[#c9a84c]/40 hover:border-[#c9a84c]/70 text-[#c9a84c] rounded-lg p-2 transition-all backdrop-blur-sm"
+          title="Ajouter une personne (ou double-cliquer sur le canvas)"
+        >
+          <Plus size={15} />
+        </button>
       </div>
 
       {/* Legend */}
-      <div className="absolute bottom-4 left-4 bg-[#14141c]/90 backdrop-blur-sm border border-[#2a2a3a] rounded-lg px-3 py-2.5">
-        <p className="text-[10px] text-[#5a5864] uppercase tracking-[0.12em] mb-1.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+      <div className="absolute bottom-4 left-4 bg-[#0f0f18]/90 backdrop-blur-sm border border-[#2a2a3a] rounded-lg px-3 py-2.5">
+        <p className="text-[10px] text-[#5a5864] uppercase tracking-[0.12em] mb-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
           Légende
         </p>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-0 border-t-2 border-dashed" style={{ borderColor: '#4a9eff' }} />
-            <span className="text-[10px] text-[#8a8894]">Parenté</span>
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-3 h-3 rounded-full border-2 border-[#4a9eff] bg-[#0f1c2e]" />
+            <span className="text-[10px] text-[#6a6874]">Homme</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-0 border-t-2" style={{ borderColor: '#c9a84c' }} />
-            <span className="text-[10px] text-[#8a8894]">Alliance</span>
+          <div className="flex items-center gap-2.5">
+            <div className="w-3 h-3 rounded-full border-2 border-[#f472b6] bg-[#200e1e]" />
+            <span className="text-[10px] text-[#6a6874]">Femme</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-0 border-t-2 border-dotted" style={{ borderColor: '#8b5cf6' }} />
-            <span className="text-[10px] text-[#8a8894]">Témoin</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-0 border-t-2" style={{ borderColor: '#10b981', borderStyle: 'dash-dot' }} />
-            <span className="text-[10px] text-[#8a8894]">Parrainage</span>
-          </div>
+          <div className="w-full h-px bg-[#1e1e28] my-0.5" />
+          {[
+            { color: '#4a9eff', dash: true, label: 'Parenté' },
+            { color: '#c9a84c', dash: false, label: 'Alliance' },
+            { color: '#8b5cf6', dash: true, label: 'Témoin', dotted: true },
+            { color: '#10b981', dash: false, label: 'Parrainage' },
+          ].map(({ color, label }) => (
+            <div key={label} className="flex items-center gap-2.5">
+              <div className="w-5 h-0 border-t-2" style={{ borderColor: color }} />
+              <span className="text-[10px] text-[#6a6874]">{label}</span>
+            </div>
+          ))}
         </div>
       </div>
+
+      {/* Hint */}
+      <div className="absolute bottom-4 right-4 text-[10px] text-[#3a3844] pointer-events-none select-none" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+        Double-clic sur le canvas pour ajouter
+      </div>
+
+      {/* Quick-add person dialog */}
+      <Dialog open={quickAddOpen} onOpenChange={setQuickAddOpen}>
+        <DialogContent className="bg-[#0f0f1a] border-[#2a2a3a] text-[#ede9e0] max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-[15px]" style={{ fontFamily: 'Cormorant Garamond, serif' }}>
+              Nouvelle personne
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] text-[#5a5864] uppercase tracking-wider block mb-1">Prénom</label>
+                <input
+                  autoFocus
+                  value={quickForm.firstName}
+                  onChange={(e) => setQuickForm((f) => ({ ...f, firstName: e.target.value }))}
+                  onKeyDown={(e) => e.key === 'Enter' && handleQuickAdd()}
+                  placeholder="Jean"
+                  className="w-full bg-[#1e1e28] border border-[#2a2a3a] rounded-md px-3 py-2 text-[12px] text-[#e8e6e1] placeholder-[#3a3844] focus:outline-none focus:border-[#c9a84c]/60 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-[#5a5864] uppercase tracking-wider block mb-1">Nom</label>
+                <input
+                  value={quickForm.lastName}
+                  onChange={(e) => setQuickForm((f) => ({ ...f, lastName: e.target.value }))}
+                  onKeyDown={(e) => e.key === 'Enter' && handleQuickAdd()}
+                  placeholder="Dupont"
+                  className="w-full bg-[#1e1e28] border border-[#2a2a3a] rounded-md px-3 py-2 text-[12px] text-[#e8e6e1] placeholder-[#3a3844] focus:outline-none focus:border-[#c9a84c]/60 transition-colors"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] text-[#5a5864] uppercase tracking-wider block mb-1">Genre</label>
+              <div className="flex gap-2">
+                {(['M', 'F'] as const).map((g) => (
+                  <button
+                    key={g}
+                    onClick={() => setQuickForm((f) => ({ ...f, gender: g }))}
+                    className={`flex-1 py-2 rounded-md text-[12px] font-medium border transition-all ${
+                      quickForm.gender === g
+                        ? g === 'M'
+                          ? 'bg-[#0f1c2e] border-[#4a9eff] text-[#4a9eff]'
+                          : 'bg-[#200e1e] border-[#f472b6] text-[#f472b6]'
+                        : 'bg-transparent border-[#2a2a3a] text-[#5a5864] hover:border-[#3a3a4a]'
+                    }`}
+                  >
+                    {g === 'M' ? 'Homme' : 'Femme'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <button
+              onClick={() => setQuickAddOpen(false)}
+              className="px-4 py-2 rounded-md text-[12px] text-[#8a8894] hover:text-[#e8e6e1] border border-[#2a2a3a] hover:bg-[#1e1e28] transition-all"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={handleQuickAdd}
+              disabled={!quickForm.firstName.trim()}
+              className="px-4 py-2 rounded-md text-[12px] font-medium bg-[#c9a84c] text-[#0a0a0f] hover:bg-[#d4b55a] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              Ajouter
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -407,22 +503,30 @@ function getRelationColor(type: string): string {
   }
 }
 
-function buildTooltip(person: Person, _branchColor: string): HTMLElement {
+function buildTooltip(person: Person): HTMLElement {
   const el = document.createElement('div');
-  el.style.cssText = 'background:#1e1e28;border:1px solid #2a2a3a;border-radius:8px;padding:12px;min-width:160px;font-family:Inter,sans-serif;';
+  el.style.cssText = 'background:#1a1a28;border:1px solid #2a2a3a;border-radius:10px;padding:12px 14px;min-width:170px;font-family:Inter,system-ui,sans-serif;box-shadow:0 8px 32px rgba(0,0,0,0.5);';
+
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;';
+
+  const badge = document.createElement('div');
+  badge.style.cssText = `width:10px;height:10px;border-radius:50%;border:2px solid ${person.gender === 'M' ? '#4a9eff' : '#f472b6'};background:${person.gender === 'M' ? '#0f1c2e' : '#200e1e'};flex-shrink:0;`;
+  header.appendChild(badge);
 
   const name = document.createElement('div');
-  name.style.cssText = 'font-size:13px;font-weight:600;color:#e8e6e1;margin-bottom:4px;';
+  name.style.cssText = 'font-size:13px;font-weight:600;color:#e8e6e1;';
   name.textContent = `${person.firstName} ${person.lastName}`;
-  el.appendChild(name);
+  header.appendChild(name);
+  el.appendChild(header);
 
   const years: string[] = [];
   if (person.birthDate) years.push(`∗ ${person.birthDate.split('-')[0]}`);
   if (person.deathDate) years.push(`† ${person.deathDate.split('-')[0]}`);
   if (years.length) {
     const dates = document.createElement('div');
-    dates.style.cssText = 'font-size:11px;color:#8a8894;margin-bottom:2px;';
-    dates.textContent = years.join('  ');
+    dates.style.cssText = 'font-size:11px;color:#7a7884;margin-bottom:3px;';
+    dates.textContent = years.join('  ·  ');
     el.appendChild(dates);
   }
 
@@ -435,8 +539,8 @@ function buildTooltip(person: Person, _branchColor: string): HTMLElement {
 
   if (person.birthPlace) {
     const place = document.createElement('div');
-    place.style.cssText = 'font-size:10px;color:#5a5864;margin-top:2px;';
-    place.textContent = person.birthPlace;
+    place.style.cssText = 'font-size:10px;color:#4a4854;margin-top:3px;';
+    place.textContent = `📍 ${person.birthPlace}`;
     el.appendChild(place);
   }
 
@@ -445,14 +549,8 @@ function buildTooltip(person: Person, _branchColor: string): HTMLElement {
 
 function isEdgeOnPath(edge: Relation, path: string[]): boolean {
   for (let i = 0; i < path.length - 1; i++) {
-    const a = path[i];
-    const b = path[i + 1];
-    if (
-      (edge.from === a && edge.to === b) ||
-      (edge.from === b && edge.to === a)
-    ) {
-      return true;
-    }
+    const a = path[i], b = path[i + 1];
+    if ((edge.from === a && edge.to === b) || (edge.from === b && edge.to === a)) return true;
   }
   return false;
 }
