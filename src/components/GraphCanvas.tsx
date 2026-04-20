@@ -407,44 +407,40 @@ function getRelationColor(type: string): string {
   }
 }
 
-function buildTooltip(person: Person, branchColor: string): string {
-  const years = [];
-  if (person.birthDate) years.push(`né${person.gender === 'F' ? 'e' : ''} ${person.birthDate.split('-')[0]}`);
-  if (person.deathDate) years.push(`décédé${person.gender === 'F' ? 'e' : ''} ${person.deathDate.split('-')[0]}`);
-  const yearStr = years.join(' — ');
+function buildTooltip(person: Person, _branchColor: string): HTMLElement {
+  const el = document.createElement('div');
+  el.style.cssText = 'background:#1e1e28;border:1px solid #2a2a3a;border-radius:8px;padding:12px;min-width:160px;font-family:Inter,sans-serif;';
 
-  return `
-    <div style="
-      background: #1e1e28;
-      border: 1px solid #2a2a3a;
-      border-radius: 8px;
-      padding: 12px;
-      min-width: 180px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-    ">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-        <div style="
-          width: 36px; height: 36px; border-radius: 50%;
-          background: linear-gradient(135deg, ${branchColor}, #b87333);
-          display: flex; align-items: center; justify-content: center;
-          font-size: 13px; font-weight: 600; color: #0a0a0f;
-          font-family: 'JetBrains Mono', monospace;
-        ">
-          ${person.firstName[0]}${person.lastName[0]}
-        </div>
-        <div>
-          <p style="margin:0;font-size:13px;font-weight:600;color:#e8e6e1;font-family:'Inter',sans-serif;">
-            ${person.firstName} ${person.lastName}
-          </p>
-          <p style="margin:0;font-size:10px;color:#8a8894;font-family:'JetBrains Mono',monospace;">
-            ${yearStr}
-          </p>
-        </div>
-      </div>
-      ${person.occupation ? `<p style="margin:4px 0 0;font-size:11px;color:#c9a84c;">${person.occupation}</p>` : ''}
-      ${person.birthPlace ? `<p style="margin:2px 0 0;font-size:10px;color:#5a5864;">${person.birthPlace}</p>` : ''}
-    </div>
-  `;
+  const name = document.createElement('div');
+  name.style.cssText = 'font-size:13px;font-weight:600;color:#e8e6e1;margin-bottom:4px;';
+  name.textContent = `${person.firstName} ${person.lastName}`;
+  el.appendChild(name);
+
+  const years: string[] = [];
+  if (person.birthDate) years.push(`∗ ${person.birthDate.split('-')[0]}`);
+  if (person.deathDate) years.push(`† ${person.deathDate.split('-')[0]}`);
+  if (years.length) {
+    const dates = document.createElement('div');
+    dates.style.cssText = 'font-size:11px;color:#8a8894;margin-bottom:2px;';
+    dates.textContent = years.join('  ');
+    el.appendChild(dates);
+  }
+
+  if (person.occupation) {
+    const occ = document.createElement('div');
+    occ.style.cssText = 'font-size:11px;color:#c9a84c;margin-top:4px;';
+    occ.textContent = person.occupation;
+    el.appendChild(occ);
+  }
+
+  if (person.birthPlace) {
+    const place = document.createElement('div');
+    place.style.cssText = 'font-size:10px;color:#5a5864;margin-top:2px;';
+    place.textContent = person.birthPlace;
+    el.appendChild(place);
+  }
+
+  return el;
 }
 
 function isEdgeOnPath(edge: Relation, path: string[]): boolean {
