@@ -1,6 +1,6 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { Network, DataSet } from 'vis-network/standalone';
-import { Plus } from 'lucide-react';
+import { Plus, Link2, GitMerge } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useApp } from '@/context/AppContext';
 import type { Person, Relation } from '@/types/genealogy';
@@ -27,7 +27,7 @@ function getRelationColor(type: string): string {
 
 function buildTooltip(person: Person): HTMLElement {
   const el = document.createElement('div');
-  el.style.cssText = 'background:#1a1a28;border:1px solid #2a2a3a;border-radius:10px;padding:12px 14px;min-width:170px;font-family:Inter,system-ui,sans-serif;box-shadow:0 8px 32px rgba(0,0,0,0.5);';
+  el.style.cssText = 'background:#1a1a28;border:1px solid #2a2a3a;border-radius:10px;padding:12px 14px;min-width:170px;font-family:Outfit,system-ui,sans-serif;box-shadow:0 8px 32px rgba(0,0,0,0.5);';
 
   const header = document.createElement('div');
   header.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;';
@@ -72,6 +72,8 @@ function isEdgeOnPath(edge: Relation, path: string[]): boolean {
   return false;
 }
 
+const positionsKey = (mode: string) => `geneagraph:positions:${mode}`;
+
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function GraphCanvas() {
@@ -82,6 +84,7 @@ export default function GraphCanvas() {
   const quickAddTriggerRef = useRef<(() => void) | null>(null);
   const dimmedRef          = useRef<Set<string>>(new Set());
   const highlightedPathRef = useRef<string[] | null>(null);
+  const pathModeRef        = useRef(false);
 
   const {
     persons, relations, branches,
@@ -89,9 +92,18 @@ export default function GraphCanvas() {
     layoutMode, setLayoutMode,
     activeFilters, activeBranchFilters,
     setHoveredPersonId,
-    highlightedPath,
+    highlightedPath, setHighlightedPath,
     addPerson,
+    setPanelOpen,
+    yearRange,
+    showPivots, toggleShowPivots,
+    betweennessMap,
+    getShortestPath,
   } = useApp();
+
+  const [pathMode, setPathMode] = useState(false);
+  const [pathNodeA, setPathNodeA] = useState<string | null>(null);
+  const pathNodeARef = useRef<string | null>(null);
 
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickForm, setQuickForm] = useState({ firstName: '', lastName: '', gender: 'M' as 'M' | 'F' });
@@ -101,10 +113,13 @@ export default function GraphCanvas() {
     setQuickAddOpen(true);
   };
 
-  const branchColorMap = new Map<string, string>();
-  branches.forEach(b => branchColorMap.set(b.id, b.color));
+  const branchColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    branches.forEach(b => map.set(b.id, b.color));
+    return map;
+  }, [branches]);
 
-  const filteredRelations = relations.filter(r => {
+  const filteredRelations = useMemo(() => relations.filter(r => {
     if (!activeFilters.includes(r.type)) return false;
     const from = persons.find(p => p.id === r.from);
     const to   = persons.find(p => p.id === r.to);
@@ -112,25 +127,40 @@ export default function GraphCanvas() {
     if (from.branch && !activeBranchFilters.includes(from.branch)) return false;
     if (to.branch   && !activeBranchFilters.includes(to.branch))   return false;
     return true;
-  });
+  }), [relations, persons, activeFilters, activeBranchFilters]);
 
-  const visiblePersonIds = new Set<string>();
-  filteredRelations.forEach(r => { visiblePersonIds.add(r.from); visiblePersonIds.add(r.to); });
-  persons.forEach(p => { if (!p.branch || activeBranchFilters.includes(p.branch)) visiblePersonIds.add(p.id); });
-  const visiblePersons = persons.filter(p => visiblePersonIds.has(p.id));
+  const visiblePersons = useMemo(() => {
+    const ids = new Set<string>();
+    filteredRelations.forEach(r => { ids.add(r.from); ids.add(r.to); });
+    persons.forEach(p => { if (!p.branch || activeBranchFilters.includes(p.branch)) ids.add(p.id); });
+    let result = persons.filter(p => ids.has(p.id));
+    if (yearRange) {
+      result = result.filter(p => {
+        const y = p.birthDate ? parseInt(p.birthDate) : null;
+        return y === null || (y >= yearRange[0] && y <= yearRange[1]);
+      });
+    }
+    return result;
+  }, [persons, filteredRelations, activeBranchFilters, yearRange]);
 
-  const degreeMap = new Map<string, number>();
-  visiblePersons.forEach(p => degreeMap.set(p.id, 0));
-  filteredRelations.forEach(r => {
-    degreeMap.set(r.from, (degreeMap.get(r.from) || 0) + 1);
-    degreeMap.set(r.to,   (degreeMap.get(r.to)   || 0) + 1);
-  });
+  const degreeMap = useMemo(() => {
+    const map = new Map<string, number>();
+    visiblePersons.forEach(p => map.set(p.id, 0));
+    filteredRelations.forEach(r => {
+      map.set(r.from, (map.get(r.from) || 0) + 1);
+      map.set(r.to,   (map.get(r.to)   || 0) + 1);
+    });
+    return map;
+  }, [visiblePersons, filteredRelations]);
 
   // ── sync path ref → redraw without recreating network ─────────────────────
   useEffect(() => {
     highlightedPathRef.current = highlightedPath;
     networkRef.current?.redraw();
   }, [highlightedPath]);
+
+  useEffect(() => { pathModeRef.current = pathMode; }, [pathMode]);
+  useEffect(() => { pathNodeARef.current = pathNodeA; networkRef.current?.redraw(); }, [pathNodeA]);
 
   // ── selection: dim non-neighbors, no network recreation ───────────────────
   useEffect(() => {
@@ -161,6 +191,17 @@ export default function GraphCanvas() {
   const createNetwork = useCallback(() => {
     if (!containerRef.current) return;
 
+    // ── restore saved positions (per layout mode) ─────────────────────────────
+    let savedPositions: Record<string, { x: number; y: number }> = {};
+    try {
+      const raw = localStorage.getItem(positionsKey(layoutMode));
+      if (raw) savedPositions = JSON.parse(raw);
+    } catch {}
+    const allHavePositions = layoutMode === 'physics' && visiblePersons.length > 0 && visiblePersons.every(p => savedPositions[p.id]);
+
+    // ── shared canvas for font-size pre-computation ───────────────────────────
+    const measureCtx = document.createElement('canvas').getContext('2d')!;
+
     const nodesData = visiblePersons.map(p => {
       const degree      = degreeMap.get(p.id) || 0;
       const size        = Math.max(36, Math.min(56, 36 + degree * 3));
@@ -173,10 +214,24 @@ export default function GraphCanvas() {
       // Max usable text width inside circle (inscribed rectangle ≈ r*√2)
       const maxTextW = size * 1.28;
 
+      // Pre-compute font size once (avoid measureText loop every frame)
+      const longestWord = firstName.length >= lastName.length ? firstName : lastName;
+      let cachedFs = Math.min(15, Math.max(9, Math.round(size * 0.38)));
+      measureCtx.font = `600 ${cachedFs}px Outfit, -apple-system, sans-serif`;
+      while (measureCtx.measureText(longestWord).width > maxTextW && cachedFs > 8) {
+        cachedFs--;
+        measureCtx.font = `600 ${cachedFs}px Outfit, -apple-system, sans-serif`;
+      }
+      const nodeFs   = cachedFs;
+      const nodeLineH = nodeFs + 3;
+      const nodeTotalH = nodeLineH * 2 - 3;
+
       return {
         id: p.id,
         label: '',
         size,
+        x: savedPositions[p.id]?.x,
+        y: savedPositions[p.id]?.y,
         shape: 'custom' as const,
         ctxRenderer: ({ ctx, x, y, state: { selected, hover } }: any) => ({
           drawNode() {
@@ -208,27 +263,39 @@ export default function GraphCanvas() {
             ctx.lineWidth   = selected || isOnPath ? 3.5 : 2;
             ctx.stroke();
 
-            // ── name inside: auto-fit font size ──────────────────────────────
-            const textColor = isDimmed ? 'rgba(200,200,200,0.35)' : selected ? '#ffffff' : '#eceae5';
-            ctx.textAlign   = 'center';
-            ctx.fillStyle   = textColor;
-
-            // Find font size that fits longest of the two lines
-            const longestWord = firstName.length >= lastName.length ? firstName : lastName;
-            let fs = Math.min(15, Math.max(9, Math.round(r * 0.38)));
-            ctx.font = `600 ${fs}px Inter, -apple-system, sans-serif`;
-            while (ctx.measureText(longestWord).width > maxTextW && fs > 8) {
-              fs--;
-              ctx.font = `600 ${fs}px Inter, -apple-system, sans-serif`;
+            // ── pivot ring ───────────────────────────────────────────────────
+            const pivotScore = betweennessMap.get(p.id) || 0;
+            if (showPivots && pivotScore > 0.1) {
+              ctx.beginPath();
+              ctx.arc(x, y, r + 5 + pivotScore * 4, 0, 2 * Math.PI);
+              ctx.strokeStyle = `rgba(201,168,76,${0.3 + pivotScore * 0.6})`;
+              ctx.lineWidth = 1.5;
+              ctx.setLineDash([4, 3]);
+              ctx.stroke();
+              ctx.setLineDash([]);
             }
 
-            const lineH  = fs + 3;
-            const totalH = lineH * 2 - 3;
-            const startY = y - totalH / 2 + fs * 0.35;
+            // ── path-mode node A marker ──────────────────────────────────────
+            if (pathNodeARef.current === p.id) {
+              ctx.beginPath();
+              ctx.arc(x, y, r + 8, 0, 2 * Math.PI);
+              ctx.strokeStyle = 'rgba(99,202,255,0.8)';
+              ctx.lineWidth = 2;
+              ctx.setLineDash([3, 3]);
+              ctx.stroke();
+              ctx.setLineDash([]);
+            }
 
+            // ── name inside (cached font size) ────────────────────────────────
+            const textColor = isDimmed ? 'rgba(200,200,200,0.35)' : selected ? '#ffffff' : '#eceae5';
+            ctx.textAlign    = 'center';
             ctx.textBaseline = 'middle';
+            ctx.fillStyle    = textColor;
+            ctx.font = `600 ${nodeFs}px Outfit, -apple-system, sans-serif`;
+
+            const startY = y - nodeTotalH / 2 + nodeFs * 0.35;
             ctx.fillText(firstName, x, startY);
-            ctx.fillText(lastName,  x, startY + lineH);
+            ctx.fillText(lastName,  x, startY + nodeLineH);
 
             ctx.restore();
           },
@@ -254,7 +321,7 @@ export default function GraphCanvas() {
                : false,
         arrows: (r.type === 'parent' || r.type === 'adoption' || r.type === 'tutelle')
           ? { to: { enabled: true, scaleFactor: 0.45 } } : undefined,
-        font: { color: '#6a6874', size: 9, face: 'Inter, system-ui, sans-serif', background: 'rgba(10,10,15,0.85)', strokeWidth: 0 },
+        font: { color: '#6a6874', size: 9, face: 'Outfit, system-ui, sans-serif', background: 'rgba(10,10,15,0.85)', strokeWidth: 0 },
         smooth: { enabled: true, type: 'continuous' as const, roundness: 0.15 },
       };
     });
@@ -265,9 +332,9 @@ export default function GraphCanvas() {
     edgesRef.current = edges;
 
     const options: any = {
-      nodes: { chosen: true, scaling: { min: 26, max: 44 } },
-      edges: { chosen: true, selectionWidth: 2 },
-      physics: layoutMode === 'physics' ? {
+      nodes: { chosen: false, scaling: { min: 26, max: 44 } },
+      edges: { chosen: false, selectionWidth: 2 },
+      physics: (layoutMode === 'physics' && !allHavePositions) ? {
         enabled: true,
         solver: 'barnesHut',
         barnesHut: { gravitationalConstant: -8000, centralGravity: 0.12, springLength: 300, springConstant: 0.028, damping: 0.92, avoidOverlap: 1.0 },
@@ -279,23 +346,76 @@ export default function GraphCanvas() {
       interaction: {
         hover: true, tooltipDelay: 150, hideEdgesOnDrag: false,
         navigationButtons: false, keyboard: false,
-        zoomView: true, dragView: true, multiselect: false, zoomSpeed: 0.6,
+        zoomView: true, dragView: true, dragNodes: true, multiselect: false, zoomSpeed: 0.35,
+        hoverConnectedEdges: false,
       },
     };
 
     const network = new Network(containerRef.current, { nodes, edges }, options);
     networkRef.current = network;
+    let destroyed = false;
 
-    // Ensure fonts loaded for canvas text
-    document.fonts.ready.then(() => network.redraw());
-
-    network.once('stabilizationIterationsDone', () => {
-      network.setOptions({ physics: false });
-      network.fit({ animation: { duration: 600, easingFunction: 'easeOutQuart' } });
+    document.fonts.ready.then(() => {
+      if (!destroyed && networkRef.current) {
+        networkRef.current.redraw();
+      }
     });
 
+    const savePositions = () => {
+      try {
+        localStorage.setItem(positionsKey(layoutMode), JSON.stringify(network.getPositions()));
+      } catch {}
+    };
+
+    if (layoutMode === 'hierarchical') {
+      // vis-network places nodes directly; stabilizationIterationsDone won't fire with physics:false
+      setTimeout(() => {
+        if (!destroyed) {
+          network.fit({ animation: { duration: 600, easingFunction: 'easeOutQuart' } });
+          savePositions();
+        }
+      }, 400);
+    } else if (allHavePositions) {
+      requestAnimationFrame(() => {
+        if (!destroyed) {
+          network.fit({ animation: { duration: 600, easingFunction: 'easeOutQuart' } });
+        }
+      });
+    } else {
+      network.once('stabilizationIterationsDone', () => {
+        if (!destroyed) {
+          network.setOptions({ physics: false });
+          network.fit({ animation: { duration: 600, easingFunction: 'easeOutQuart' } });
+          savePositions();
+        }
+      });
+    }
+
+    network.on('dragEnd', () => { if (!destroyed) savePositions(); });
+
     network.on('click', (params: any) => {
-      setSelectedPersonId(params.nodes?.length > 0 ? params.nodes[0] : null);
+      const clickedId: string | null = params.nodes?.length > 0 ? params.nodes[0] : null;
+
+      if (pathModeRef.current) {
+        if (!clickedId) { pathModeRef.current = false; setPathMode(false); setPathNodeA(null); pathNodeARef.current = null; network.redraw(); return; }
+        if (!pathNodeARef.current) {
+          pathNodeARef.current = clickedId; setPathNodeA(clickedId); network.redraw();
+        } else if (pathNodeARef.current !== clickedId) {
+          const path = getShortestPath(pathNodeARef.current, clickedId);
+          if (path.length > 0) setHighlightedPath(path);
+          pathModeRef.current = false; setPathMode(false); setPathNodeA(null); pathNodeARef.current = null;
+          setSelectedPersonId(clickedId); setPanelOpen(true);
+        }
+        return;
+      }
+
+      if (clickedId) {
+        setSelectedPersonId(clickedId);
+        setPanelOpen(true);
+      } else {
+        setSelectedPersonId(null);
+        setPanelOpen(false);
+      }
     });
 
     network.on('hoverNode', (params: any) => setHoveredPersonId(params.node));
@@ -317,12 +437,15 @@ export default function GraphCanvas() {
     window.addEventListener('geneagraph:selectPerson', handleSelectPerson);
 
     return () => {
+      destroyed = true;
       window.removeEventListener('geneagraph:selectPerson', handleSelectPerson);
       network.destroy();
+      networkRef.current = null;
     };
   }, [
-    visiblePersons, filteredRelations, layoutMode, branches,
-    setSelectedPersonId, setHoveredPersonId,
+    visiblePersons, filteredRelations, layoutMode, branchColorMap, degreeMap,
+    betweennessMap, showPivots,
+    setSelectedPersonId, setHoveredPersonId, setPanelOpen, setHighlightedPath, getShortestPath,
     // selectedPersonId & highlightedPath intentionally excluded — handled via refs
   ]);
 
@@ -333,8 +456,12 @@ export default function GraphCanvas() {
 
   const handleQuickAdd = () => {
     if (!quickForm.firstName.trim()) return;
-    addPerson({ firstName: quickForm.firstName.trim(), lastName: quickForm.lastName.trim(), gender: quickForm.gender });
+    const newId = addPerson({ firstName: quickForm.firstName.trim(), lastName: quickForm.lastName.trim(), gender: quickForm.gender });
     setQuickAddOpen(false);
+    setTimeout(() => {
+      setSelectedPersonId(newId);
+      setPanelOpen(true);
+    }, 80);
   };
 
   return (
@@ -346,7 +473,7 @@ export default function GraphCanvas() {
         <div className="bg-[#14141c]/90 backdrop-blur-sm border border-[#2a2a3a] rounded-lg p-1 flex items-center gap-1">
           <button
             onClick={() => networkRef.current?.fit({ animation: { duration: 500, easingFunction: 'easeOutQuart' } })}
-            className="p-2 rounded-md text-[#8a8894] hover:text-[#e8e6e1] hover:bg-[#1e1e28] transition-colors"
+            className="p-2 rounded-md text-[#8a8894] hover:text-[#e8e6e1] hover:bg-[#1e1e28] transition-colors cursor-pointer"
             title="Réinitialiser la vue"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -356,7 +483,7 @@ export default function GraphCanvas() {
           <div className="w-px h-4 bg-[#2a2a3a]" />
           <button
             onClick={() => { if (!document.fullscreenElement) containerRef.current?.requestFullscreen(); else document.exitFullscreen(); }}
-            className="p-2 rounded-md text-[#8a8894] hover:text-[#e8e6e1] hover:bg-[#1e1e28] transition-colors"
+            className="p-2 rounded-md text-[#8a8894] hover:text-[#e8e6e1] hover:bg-[#1e1e28] transition-colors cursor-pointer"
             title="Plein écran"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -366,18 +493,45 @@ export default function GraphCanvas() {
         </div>
 
         <div className="bg-[#14141c]/90 backdrop-blur-sm border border-[#2a2a3a] rounded-lg p-1 flex items-center">
-          <button onClick={() => setLayoutMode('physics')} className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-all ${layoutMode === 'physics' ? 'bg-[#c9a84c] text-[#0a0a0f]' : 'text-[#8a8894] hover:text-[#e8e6e1]'}`}>Réseau</button>
-          <button onClick={() => setLayoutMode('hierarchical')} className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-all ${layoutMode === 'hierarchical' ? 'bg-[#c9a84c] text-[#0a0a0f]' : 'text-[#8a8894] hover:text-[#e8e6e1]'}`}>Hiérarchie</button>
+          <button onClick={() => setLayoutMode('physics')} className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-all cursor-pointer ${layoutMode === 'physics' ? 'bg-[#c9a84c] text-[#0a0a0f]' : 'text-[#8a8894] hover:text-[#e8e6e1]'}`}>Réseau</button>
+          <button onClick={() => setLayoutMode('hierarchical')} className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-all cursor-pointer ${layoutMode === 'hierarchical' ? 'bg-[#c9a84c] text-[#0a0a0f]' : 'text-[#8a8894] hover:text-[#e8e6e1]'}`}>Hiérarchie</button>
         </div>
 
         <button
           onClick={() => quickAddTriggerRef.current?.()}
-          className="bg-[#c9a84c]/10 hover:bg-[#c9a84c]/20 border border-[#c9a84c]/40 hover:border-[#c9a84c]/70 text-[#c9a84c] rounded-lg p-2 transition-all backdrop-blur-sm"
+          className="bg-[#c9a84c]/10 hover:bg-[#c9a84c]/20 border border-[#c9a84c]/40 hover:border-[#c9a84c]/70 text-[#c9a84c] rounded-lg p-2 transition-all backdrop-blur-sm cursor-pointer"
           title="Ajouter une personne (ou double-cliquer sur le canvas)"
         >
           <Plus size={15} />
         </button>
+
+        <button
+          onClick={toggleShowPivots}
+          title="Nœuds pivot (betweenness centrality)"
+          className={`rounded-lg p-2 transition-all backdrop-blur-sm cursor-pointer border ${showPivots ? 'bg-[#c9a84c]/20 border-[#c9a84c]/60 text-[#c9a84c]' : 'bg-[#14141c]/90 border-[#2a2a3a] text-[#5a5864] hover:text-[#e8e6e1]'}`}
+        >
+          <GitMerge size={15} />
+        </button>
+
+        <button
+          onClick={() => {
+            const next = !pathMode;
+            setPathMode(next);
+            if (!next) { setPathNodeA(null); pathNodeARef.current = null; networkRef.current?.redraw(); }
+          }}
+          title="Trouver le chemin entre deux personnes"
+          className={`rounded-lg p-2 transition-all backdrop-blur-sm cursor-pointer border ${pathMode ? 'bg-[#4a9eff]/20 border-[#4a9eff]/60 text-[#4a9eff]' : 'bg-[#14141c]/90 border-[#2a2a3a] text-[#5a5864] hover:text-[#e8e6e1]'}`}
+        >
+          <Link2 size={15} />
+        </button>
       </div>
+
+      {pathMode && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 bg-[#0f0f1a]/95 border border-[#4a9eff]/40 rounded-lg px-4 py-2 text-[12px] text-[#4a9eff] backdrop-blur-sm pointer-events-none flex items-center gap-2">
+          <Link2 size={12} />
+          {pathNodeA ? 'Cliquez la 2ème personne…' : 'Cliquez la 1ère personne…'}
+        </div>
+      )}
 
       {/* Legend */}
       <div className="absolute bottom-4 left-4 bg-[#0f0f18]/90 backdrop-blur-sm border border-[#2a2a3a] rounded-lg px-3 py-2.5">
@@ -436,7 +590,7 @@ export default function GraphCanvas() {
               <div className="flex gap-2">
                 {(['M', 'F'] as const).map(g => (
                   <button key={g} onClick={() => setQuickForm(f => ({ ...f, gender: g }))}
-                    className={`flex-1 py-2 rounded-md text-[12px] font-medium border transition-all ${quickForm.gender === g ? (g === 'M' ? 'bg-[#0f1c2e] border-[#4a9eff] text-[#4a9eff]' : 'bg-[#200e1e] border-[#f472b6] text-[#f472b6]') : 'bg-transparent border-[#2a2a3a] text-[#5a5864] hover:border-[#3a3a4a]'}`}>
+                    className={`flex-1 py-2 rounded-md text-[12px] font-medium border transition-all cursor-pointer ${quickForm.gender === g ? (g === 'M' ? 'bg-[#0f1c2e] border-[#4a9eff] text-[#4a9eff]' : 'bg-[#200e1e] border-[#f472b6] text-[#f472b6]') : 'bg-transparent border-[#2a2a3a] text-[#5a5864] hover:border-[#3a3a4a]'}`}>
                     {g === 'M' ? 'Homme' : 'Femme'}
                   </button>
                 ))}
@@ -444,8 +598,8 @@ export default function GraphCanvas() {
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <button onClick={() => setQuickAddOpen(false)} className="px-4 py-2 rounded-md text-[12px] text-[#8a8894] hover:text-[#e8e6e1] border border-[#2a2a3a] hover:bg-[#1e1e28] transition-all">Annuler</button>
-            <button onClick={handleQuickAdd} disabled={!quickForm.firstName.trim()} className="px-4 py-2 rounded-md text-[12px] font-medium bg-[#c9a84c] text-[#0a0a0f] hover:bg-[#d4b55a] disabled:opacity-40 disabled:cursor-not-allowed transition-all">Ajouter</button>
+            <button onClick={() => setQuickAddOpen(false)} className="px-4 py-2 rounded-md text-[12px] text-[#8a8894] hover:text-[#e8e6e1] border border-[#2a2a3a] hover:bg-[#1e1e28] transition-all cursor-pointer">Annuler</button>
+            <button onClick={handleQuickAdd} disabled={!quickForm.firstName.trim()} className="px-4 py-2 rounded-md text-[12px] font-medium bg-[#c9a84c] text-[#0a0a0f] hover:bg-[#d4b55a] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer">Ajouter</button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

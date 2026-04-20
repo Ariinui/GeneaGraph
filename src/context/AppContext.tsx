@@ -2,9 +2,15 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useEf
 import type { Person, Relation, Source, Branch, ViewMode, RelationType } from '@/types/genealogy';
 import { getSampleData, BRANCH_COLORS } from '@/data/sampleData';
 import type { ParsedPerson, ParsedRelation } from '@/utils/gedcomParser';
+import { appwriteService } from '@/services/appwriteService';
+import { computeBetweenness } from '@/utils/betweenness';
 
 const STORAGE_KEY = 'geneagraph:tree';
 const STORAGE_VERSION = 1;
+const CLOUD_ENABLED_KEY = 'geneagraph:cloudEnabled';
+
+const APPWRITE_CONFIGURED = import.meta.env.VITE_APPWRITE_PROJECT_ID && 
+                             import.meta.env.VITE_APPWRITE_PROJECT_ID !== 'your-project-id-here';
 
 function buildPersonsWithBranches(persons: Person[], relations: Relation[]): Person[] {
   const branchMap = new Map<string, string>();
@@ -73,6 +79,12 @@ interface AppState {
   searchQuery: string;
   panelOpen: boolean;
   highlightedPath: string[] | null;
+  cloudEnabled: boolean;
+  cloudSyncing: boolean;
+  cloudError: string | null;
+  yearRange: [number, number] | null;
+  showPivots: boolean;
+  betweennessMap: Map<string, number>;
 }
 
 interface AppContextType extends AppState {
@@ -84,8 +96,9 @@ interface AppContextType extends AppState {
   setHoveredPersonId: (id: string | null) => void;
   setSearchQuery: (q: string) => void;
   togglePanel: () => void;
+  setPanelOpen: (open: boolean) => void;
   setHighlightedPath: (path: string[] | null) => void;
-  addPerson: (person: Omit<Person, 'id'>) => void;
+  addPerson: (person: Omit<Person, 'id'>) => string;
   addRelation: (relation: Omit<Relation, 'id'>) => void;
   getPersonRelations: (personId: string) => Relation[];
   getPersonSources: (personId: string) => Source[];
@@ -98,6 +111,10 @@ interface AppContextType extends AppState {
   clearAll: () => void;
   deleteBranch: (branchId: string) => void;
   importData: (persons: ParsedPerson[], relations: ParsedRelation[], mode: 'replace' | 'merge') => void;
+  toggleCloudSync: () => void;
+  syncWithCloud: () => Promise<void>;
+  setYearRange: (range: [number, number] | null) => void;
+  toggleShowPivots: () => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -187,12 +204,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [activeBranchFilters, setActiveBranchFilters] = useState<string[]>([]);
   const [hoveredPersonId, setHoveredPersonId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [highlightedPath, setHighlightedPath] = useState<string[] | null>(null);
+  
+  const initialCloudEnabled = localStorage.getItem(CLOUD_ENABLED_KEY) === 'true' && APPWRITE_CONFIGURED;
+  const [cloudEnabled, setCloudEnabled] = useState(initialCloudEnabled);
+  const [cloudSyncing, setCloudSyncing] = useState(false);
+  const [cloudError, setCloudError] = useState<string | null>(null);
+
   const [persons, setPersons] = useState<Person[]>(() => getInitialTree().persons);
   const [relations, setRelations] = useState<Relation[]>(() => getInitialTree().relations);
 
+  const [yearRange, setYearRange] = useState<[number, number] | null>(null);
+  const [showPivots, setShowPivots] = useState(false);
+  const toggleShowPivots = useCallback(() => setShowPivots(p => !p), []);
+
   const branches = useMemo(() => detectBranches(persons, relations), [persons, relations]);
+
+  const betweennessMap = useMemo(() => {
+    if (!showPivots) return new Map<string, number>();
+    return computeBetweenness(persons.map(p => p.id), relations);
+  }, [showPivots, persons, relations]);
 
   const deleteBranch = useCallback((branchId: string) => {
     const ids = persons.filter(p => p.branch === branchId).map(p => p.id);
@@ -221,34 +253,93 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const togglePanel = useCallback(() => setPanelOpen((p) => !p), []);
 
-  const addPerson = useCallback((person: Omit<Person, 'id'>) => {
-    const newPerson = { ...person, id: `p-${Date.now()}` };
+  const addPerson = useCallback((person: Omit<Person, 'id'>): string => {
+    const id = `p-${Date.now()}`;
+    const newPerson = { ...person, id };
     setPersons((prev) => [...prev, newPerson]);
-  }, []);
+    if (cloudEnabled) {
+      appwriteService.addPerson(newPerson);
+    }
+    return id;
+  }, [cloudEnabled]);
 
   const addRelation = useCallback((relation: Omit<Relation, 'id'>) => {
-    const newRelation = { ...relation, id: `r-${Date.now()}` };
+    const id = `r-${Date.now()}`;
+    const newRelation = { ...relation, id };
     setRelations((prev) => [...prev, newRelation]);
-  }, []);
+    if (cloudEnabled) {
+      appwriteService.addRelation(newRelation);
+    }
+  }, [cloudEnabled]);
 
   const updatePerson = useCallback((id: string, updates: Partial<Omit<Person, 'id'>>) => {
     setPersons(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-  }, []);
+    if (cloudEnabled) {
+      appwriteService.updatePerson(id, updates);
+    }
+  }, [cloudEnabled]);
 
   const deletePerson = useCallback((id: string) => {
     setPersons(prev => prev.filter(p => p.id !== id));
     setRelations(prev => prev.filter(r => r.from !== id && r.to !== id));
-  }, []);
+    if (cloudEnabled) {
+      appwriteService.deletePerson(id);
+      appwriteService.deleteRelationsForPerson(id);
+    }
+  }, [cloudEnabled]);
 
   const deleteRelation = useCallback((id: string) => {
     setRelations(prev => prev.filter(r => r.id !== id));
+    if (cloudEnabled) {
+      appwriteService.deleteRelation(id);
+    }
+  }, [cloudEnabled]);
+
+  const toggleCloudSync = useCallback(() => {
+    const newEnabled = !cloudEnabled;
+    setCloudEnabled(newEnabled);
+    localStorage.setItem(CLOUD_ENABLED_KEY, String(newEnabled));
+    setCloudError(null);
+  }, [cloudEnabled]);
+
+  const syncWithCloud = useCallback(async () => {
+    if (!APPWRITE_CONFIGURED) {
+      setCloudError('Appwrite non configuré. Vérifiez vos variables d\'environnement.');
+      return;
+    }
+    
+    setCloudSyncing(true);
+    setCloudError(null);
+    
+    try {
+      const data = await appwriteService.loadData();
+      if (data.persons.length > 0 || data.relations.length > 0) {
+        setPersons(buildPersonsWithBranches(data.persons, data.relations));
+        setRelations(data.relations);
+      }
+    } catch (error) {
+      setCloudError('Erreur de synchronisation avec le cloud');
+      console.error('Cloud sync error:', error);
+    } finally {
+      setCloudSyncing(false);
+    }
   }, []);
+
+  const [initialized, setInitialized] = useState(false);
+  useEffect(() => {
+    if (cloudEnabled && APPWRITE_CONFIGURED && !initialized) {
+      syncWithCloud().then(() => setInitialized(true));
+    }
+  }, [cloudEnabled, initialized, syncWithCloud]);
 
   const clearAll = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
     setPersons([]);
     setRelations([]);
-  }, []);
+    if (cloudEnabled) {
+      appwriteService.clearAll();
+    }
+  }, [cloudEnabled]);
 
   const importData = useCallback((
     rawPersons: ParsedPerson[],
@@ -379,6 +470,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     searchQuery,
     panelOpen,
     highlightedPath,
+    cloudEnabled,
+    cloudSyncing,
+    cloudError,
     setSelectedPersonId,
     setViewMode,
     setLayoutMode,
@@ -387,6 +481,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setHoveredPersonId,
     setSearchQuery,
     togglePanel,
+    setPanelOpen,
     setHighlightedPath,
     addPerson,
     addRelation,
@@ -401,6 +496,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     clearAll,
     deleteBranch,
     importData,
+    toggleCloudSync,
+    syncWithCloud,
+    yearRange,
+    setYearRange,
+    showPivots,
+    betweennessMap,
+    toggleShowPivots,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

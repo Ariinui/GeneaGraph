@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
-import { TreePine, FileText, Database, GitBranch, Search, X, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { TreePine, FileText, Database, GitBranch, Search, X, Trash2, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import type { RelationType, ViewMode } from '@/types/genealogy';
@@ -37,7 +37,33 @@ export default function Sidebar() {
     persons,
     relations,
     deleteBranch,
+    yearRange,
+    setYearRange,
   } = useApp();
+
+  const birthYears = persons.map(p => p.birthDate ? parseInt(p.birthDate) : NaN).filter(y => !isNaN(y) && y > 1000 && y < 2100);
+  const dataMin = birthYears.length ? Math.min(...birthYears) : 1700;
+  const dataMax = birthYears.length ? Math.max(...birthYears) : 2024;
+
+  const [temporalActive, setTemporalActive] = useState(false);
+  const [localMin, setLocalMin] = useState(dataMin);
+  const [localMax, setLocalMax] = useState(dataMax);
+
+  useEffect(() => {
+    if (temporalActive) {
+      setLocalMin(dataMin);
+      setLocalMax(dataMax);
+      setYearRange([dataMin, dataMax]);
+    } else {
+      setYearRange(null);
+    }
+  }, [temporalActive]); // eslint-disable-line
+
+  const visibleCount = persons.filter(p => {
+    if (!yearRange) return true;
+    const y = p.birthDate ? parseInt(p.birthDate) : null;
+    return y === null || (y >= yearRange[0] && y <= yearRange[1]);
+  }).length;
 
   const [branchToDelete, setBranchToDelete] = useState<Branch | null>(null);
   const [collapsed, setCollapsed] = useState(false);
@@ -60,12 +86,10 @@ export default function Sidebar() {
   if (collapsed) {
     return (
       <aside className="w-[56px] min-w-[56px] h-screen bg-[#0a0a0f] border-r border-[#2a2a3a] flex flex-col items-center py-4 gap-1">
-        {/* Logo icon */}
         <div className="w-8 h-8 rounded-lg bg-[#c9a84c]/10 border border-[#c9a84c]/30 flex items-center justify-center mb-3">
           <TreePine size={15} className="text-[#c9a84c]" />
         </div>
 
-        {/* Nav icons */}
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
@@ -73,7 +97,7 @@ export default function Sidebar() {
               key={item.mode}
               onClick={() => { setViewMode(item.mode); navigate(item.path); }}
               title={item.label}
-              className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
+              className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
                 isActive ? 'bg-[#1e1e28] text-[#c9a84c]' : 'text-[#5a5864] hover:bg-[#14141c] hover:text-[#e8e6e1]'
               }`}
             >
@@ -84,10 +108,9 @@ export default function Sidebar() {
 
         <div className="flex-1" />
 
-        {/* Expand button */}
         <button
           onClick={() => setCollapsed(false)}
-          className="w-10 h-10 rounded-lg flex items-center justify-center text-[#5a5864] hover:bg-[#14141c] hover:text-[#c9a84c] transition-all"
+          className="w-10 h-10 rounded-lg flex items-center justify-center text-[#5a5864] hover:bg-[#14141c] hover:text-[#c9a84c] transition-all cursor-pointer"
           title="Ouvrir la sidebar"
         >
           <ChevronRight size={16} />
@@ -98,7 +121,6 @@ export default function Sidebar() {
 
   return (
     <aside className="w-[280px] min-w-[280px] h-screen bg-[#0a0a0f] border-r border-[#2a2a3a] flex flex-col overflow-hidden">
-      {/* Logo + collapse button */}
       <div className="px-5 py-5 border-b border-[#2a2a3a]">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -114,7 +136,7 @@ export default function Sidebar() {
           </div>
           <button
             onClick={() => setCollapsed(true)}
-            className="w-7 h-7 rounded-md flex items-center justify-center text-[#5a5864] hover:bg-[#1e1e28] hover:text-[#c9a84c] transition-all"
+            className="w-7 h-7 rounded-md flex items-center justify-center text-[#5a5864] hover:bg-[#1e1e28] hover:text-[#c9a84c] transition-all cursor-pointer"
             title="Réduire la sidebar"
           >
             <ChevronLeft size={14} />
@@ -122,7 +144,6 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Navigation */}
       <nav className="px-3 py-4 space-y-1">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
@@ -130,7 +151,7 @@ export default function Sidebar() {
             <button
               key={item.mode}
               onClick={() => { setViewMode(item.mode); navigate(item.path); }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-all duration-200 ${
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-all duration-200 cursor-pointer ${
                 isActive
                   ? 'bg-[#1e1e28] text-[#c9a84c] border-l-2 border-[#c9a84c]'
                   : 'text-[#8a8894] hover:bg-[#14141c] hover:text-[#e8e6e1]'
@@ -176,7 +197,7 @@ export default function Sidebar() {
                   setSearchQuery('');
                   window.dispatchEvent(new CustomEvent('geneagraph:selectPerson', { detail: p.id }));
                 }}
-                className="w-full text-left px-3 py-2 text-[12px] text-[#e8e6e1] hover:bg-[#2a2a3a] transition-colors"
+                className="w-full text-left px-3 py-2 text-[12px] text-[#e8e6e1] hover:bg-[#2a2a3a] transition-colors cursor-pointer"
               >
                 <span className="font-medium">{p.firstName} {p.lastName}</span>
                 <span className="text-[#5a5864] ml-2">{p.birthDate?.split('-')[0]}</span>
@@ -188,7 +209,6 @@ export default function Sidebar() {
 
       <div className="mx-4 h-px bg-[#2a2a3a]" />
 
-      {/* Relation Filters */}
       <div className="px-4 py-3">
         <h3 className="text-[10px] font-medium text-[#5a5864] uppercase tracking-[0.15em] mb-2.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
           Types de liens
@@ -201,7 +221,7 @@ export default function Sidebar() {
             >
               <button
                 onClick={() => toggleRelationFilter(cfg.type)}
-                className={`w-4 h-4 rounded border flex items-center justify-center transition-all duration-150 ${
+                className={`w-4 h-4 rounded border flex items-center justify-center transition-all duration-150 cursor-pointer ${
                   activeFilters.includes(cfg.type)
                     ? 'bg-[#c9a84c] border-[#c9a84c]'
                     : 'border-[#2a2a3a] group-hover:border-[#5a5864]'
@@ -222,7 +242,46 @@ export default function Sidebar() {
 
       <div className="mx-4 h-px bg-[#2a2a3a]" />
 
-      {/* Branch Filters */}
+      {/* Temporal filter */}
+      <div className="px-4 py-3">
+        <div className="flex items-center justify-between mb-2.5">
+          <h3 className="text-[10px] font-medium text-[#5a5864] uppercase tracking-[0.15em] flex items-center gap-1.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+            <Clock size={10} /> Période
+          </h3>
+          <button
+            onClick={() => setTemporalActive(v => !v)}
+            className={`text-[10px] px-2 py-0.5 rounded border transition-all cursor-pointer ${temporalActive ? 'border-[#c9a84c]/50 text-[#c9a84c] bg-[#c9a84c]/10' : 'border-[#2a2a3a] text-[#5a5864] hover:border-[#5a5864]'}`}
+          >
+            {temporalActive ? 'Actif' : 'Off'}
+          </button>
+        </div>
+        {temporalActive && (
+          <div className="space-y-2.5">
+            <div>
+              <div className="flex justify-between mb-1">
+                <span className="text-[10px] text-[#5a5864]">Depuis</span>
+                <span className="text-[11px] text-[#c9a84c]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{localMin}</span>
+              </div>
+              <input type="range" min={dataMin} max={dataMax} value={localMin}
+                onChange={e => { const v = Math.min(Number(e.target.value), localMax - 1); setLocalMin(v); setYearRange([v, localMax]); }}
+                className="w-full h-1 cursor-pointer accent-[#c9a84c]" />
+            </div>
+            <div>
+              <div className="flex justify-between mb-1">
+                <span className="text-[10px] text-[#5a5864]">Jusqu'à</span>
+                <span className="text-[11px] text-[#c9a84c]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{localMax}</span>
+              </div>
+              <input type="range" min={dataMin} max={dataMax} value={localMax}
+                onChange={e => { const v = Math.max(Number(e.target.value), localMin + 1); setLocalMax(v); setYearRange([localMin, v]); }}
+                className="w-full h-1 cursor-pointer accent-[#c9a84c]" />
+            </div>
+            <p className="text-[10px] text-[#5a5864] text-center">{localMin} — {localMax} · <span className="text-[#c9a84c]">{visibleCount}</span> personnes</p>
+          </div>
+        )}
+      </div>
+
+      <div className="mx-4 h-px bg-[#2a2a3a]" />
+
       {branches.length > 0 && (
         <div className="px-4 py-3">
           <h3 className="text-[10px] font-medium text-[#5a5864] uppercase tracking-[0.15em] mb-2.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
@@ -233,7 +292,7 @@ export default function Sidebar() {
               <div key={branch.id} className="flex items-center gap-0.5 group">
                 <button
                   onClick={() => toggleBranchFilter(branch.id)}
-                  className={`px-2.5 py-1 rounded-l-md text-[11px] font-medium transition-all duration-200 border-y border-l ${
+                  className={`px-2.5 py-1 rounded-l-md text-[11px] font-medium transition-all duration-200 border-y border-l cursor-pointer ${
                     activeBranchFilters.includes(branch.id)
                       ? 'border-transparent text-[#0a0a0f]'
                       : 'border-[#2a2a3a] text-[#8a8894] hover:border-[#5a5864]'
@@ -244,7 +303,7 @@ export default function Sidebar() {
                 </button>
                 <button
                   onClick={() => setBranchToDelete(branch)}
-                  className={`px-1 py-1 rounded-r-md text-[11px] transition-all duration-200 border-y border-r opacity-0 group-hover:opacity-100 ${
+                  className={`px-1 py-1 rounded-r-md text-[11px] transition-all duration-200 border-y border-r opacity-0 group-hover:opacity-100 cursor-pointer ${
                     activeBranchFilters.includes(branch.id)
                       ? 'border-transparent text-[#0a0a0f] hover:bg-black/20'
                       : 'border-[#2a2a3a] text-[#5a5864] hover:text-red-400 hover:border-red-900/50'
@@ -279,7 +338,6 @@ export default function Sidebar() {
 
       <div className="flex-1" />
 
-      {/* Statistics */}
       <div className="px-4 py-4 border-t border-[#2a2a3a]">
         <h3 className="text-[10px] font-medium text-[#5a5864] uppercase tracking-[0.15em] mb-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
           Statistiques

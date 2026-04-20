@@ -1,11 +1,53 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GeneaGraph</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
+    <!-- PWA Primary Meta Tags -->
+    <title>GeneaGraph - Généalogie Interactive</title>
+    <meta name="title" content="GeneaGraph - Généalogie Interactive" />
+    <meta name="description" content="Application de généalogie avec graphique interactif pour visualiser et gérer votre arbre généalogique" />
+    
+    <!-- PWA Meta Tags -->
+    <meta name="application-name" content="GeneaGraph" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="GeneaGraph" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
+    
+    <!-- Theme Colors -->
+    <meta name="theme-color" content="#1a1a2e" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#1a1a2e" media="(prefers-color-scheme: light)" />
+    <meta name="msapplication-navbutton-color" content="#1a1a2e" />
+    <meta name="msapplication-TileColor" content="#1a1a2e" />
+    
+    <!-- Icons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
+    <link rel="mask-icon" href="/favicon.svg" color="#f4d03f" />
+    
+    <!-- iOS Splash Screens -->
+    <meta name="apple-touch-fullscreen" content="yes" />
+    
+    <!-- Microsoft Tiles -->
+    <meta name="msapplication-TileImage" content="/pwa-512x512.svg" />
+    <meta name="msapplication-config" content="/browserconfig.xml" />
+    
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="GeneaGraph - Généalogie Interactive" />
+    <meta property="og:description" content="Application de généalogie avec graphique interactif" />
+    <meta property="og:image" content="/pwa-512x512.svg" />
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="GeneaGraph - Généalogie Interactive" />
+    <meta name="twitter:description" content="Application de généalogie avec graphique interactif" />
+    <meta name="twitter:image" content="/pwa-512x512.svg" />
   </head>
-  <body>
+  <body class="bg-[#1a1a2e]">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
