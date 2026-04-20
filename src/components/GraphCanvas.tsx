@@ -280,34 +280,55 @@ export default function GraphCanvas() {
     // ── shared canvas for font-size pre-computation ───────────────────────────
     const measureCtx = document.createElement('canvas').getContext('2d')!;
 
+    // Card dimensions
+    const CARD_W = 160;
+    const CARD_H = 72;
+    const CARD_R = 10; // border-radius
+
+    function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.arcTo(x + w, y, x + w, y + r, r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+      ctx.lineTo(x + r, y + h);
+      ctx.arcTo(x, y + h, x, y + h - r, r);
+      ctx.lineTo(x, y + r);
+      ctx.arcTo(x, y, x + r, y, r);
+      ctx.closePath();
+    }
+
     const nodesData = visiblePersons.map(p => {
-      const degree      = degreeMap.get(p.id) || 0;
-      const size        = Math.max(36, Math.min(56, 36 + degree * 3));
-      const branchColor = p.branch ? (branchColorMap.get(p.branch) || '#5a5a6a') : '#3a3a4a';
+      const branchColor = p.branch ? (branchColorMap.get(p.branch) || '#4a5568') : '#4a5568';
       const genderColor = p.gender === 'M' ? '#4a9eff' : '#f472b6';
       const firstName   = p.firstName || '';
-      const lastName    = p.lastName  || '';
+      const lastName    = (p.lastName || '').toUpperCase();
       const [br, bg, bb] = hexToRgb(branchColor);
 
-      // Max usable text width inside circle (inscribed rectangle ≈ r*√2)
-      const maxTextW = size * 1.28;
-
-      // Pre-compute font size once (avoid measureText loop every frame)
-      const longestWord = firstName.length >= lastName.length ? firstName : lastName;
-      let cachedFs = Math.min(15, Math.max(9, Math.round(size * 0.38)));
-      measureCtx.font = `600 ${cachedFs}px Outfit, -apple-system, sans-serif`;
-      while (measureCtx.measureText(longestWord).width > maxTextW && cachedFs > 8) {
-        cachedFs--;
-        measureCtx.font = `600 ${cachedFs}px Outfit, -apple-system, sans-serif`;
+      // Pre-compute font sizes
+      const maxNameW = CARD_W - 52;
+      let firstFs = 13;
+      measureCtx.font = `600 ${firstFs}px Outfit, -apple-system, sans-serif`;
+      while (measureCtx.measureText(firstName).width > maxNameW && firstFs > 9) {
+        firstFs--;
+        measureCtx.font = `600 ${firstFs}px Outfit, -apple-system, sans-serif`;
       }
-      const nodeFs   = cachedFs;
-      const nodeLineH = nodeFs + 3;
-      const nodeTotalH = nodeLineH * 2 - 3;
+      let lastFs = 11;
+      measureCtx.font = `700 ${lastFs}px Outfit, -apple-system, sans-serif`;
+      while (measureCtx.measureText(lastName).width > maxNameW && lastFs > 8) {
+        lastFs--;
+        measureCtx.font = `700 ${lastFs}px Outfit, -apple-system, sans-serif`;
+      }
+
+      const birthYear = p.birthDate ? p.birthDate.split('-')[0] : null;
+      const deathYear = p.deathDate ? p.deathDate.split('-')[0] : null;
+      const dateStr   = birthYear ? (deathYear ? `${birthYear} – ${deathYear}` : `∗ ${birthYear}`) : '';
 
       return {
         id: p.id,
         label: '',
-        size,
+        size: Math.max(CARD_W, CARD_H) / 2,
         x: savedPositions[p.id]?.x,
         y: savedPositions[p.id]?.y,
         shape: 'custom' as const,
@@ -315,37 +336,71 @@ export default function GraphCanvas() {
           drawNode() {
             const isDimmed = dimmedRef.current.has(p.id);
             const isOnPath = highlightedPathRef.current?.includes(p.id) || false;
-            const r        = size;
+            const cx = x - CARD_W / 2;
+            const cy = y - CARD_H / 2;
 
             ctx.save();
-            ctx.globalAlpha = isDimmed ? 0.18 : 1;
+            ctx.globalAlpha = isDimmed ? 0.15 : 1;
 
-            // ── glow ─────────────────────────────────────────────────────────
-            if (selected) {
-              ctx.shadowColor = 'rgba(201,168,76,0.8)'; ctx.shadowBlur = 24;
-            } else if (isOnPath) {
-              ctx.shadowColor = 'rgba(201,168,76,0.45)'; ctx.shadowBlur = 14;
-            } else if (!isDimmed) {
-              ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 3;
+            // ── drop shadow ───────────────────────────────────────────────────
+            if (!isDimmed) {
+              ctx.shadowColor = selected ? 'rgba(201,168,76,0.6)' : isOnPath ? 'rgba(201,168,76,0.35)' : 'rgba(0,0,0,0.6)';
+              ctx.shadowBlur  = selected ? 20 : isOnPath ? 14 : 10;
+              ctx.shadowOffsetY = selected ? 0 : 3;
             }
 
-            // ── fill ─────────────────────────────────────────────────────────
-            ctx.beginPath();
-            ctx.arc(x, y, r, 0, 2 * Math.PI);
-            ctx.fillStyle = `rgba(${br},${bg},${bb},${selected ? 0.55 : 0.3})`;
+            // ── card background ───────────────────────────────────────────────
+            roundRect(ctx, cx, cy, CARD_W, CARD_H, CARD_R);
+            const bg2 = ctx.createLinearGradient(cx, cy, cx, cy + CARD_H);
+            bg2.addColorStop(0, `rgba(${br},${bg},${bb},${selected ? 0.38 : 0.22})`);
+            bg2.addColorStop(1, `rgba(${br},${bg},${bb},${selected ? 0.25 : 0.12})`);
+            ctx.fillStyle = bg2;
             ctx.fill();
             ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
 
-            // ── border ───────────────────────────────────────────────────────
-            ctx.strokeStyle = selected ? '#c9a84c' : isOnPath ? '#e0c97f' : hover ? '#c9a84c' : genderColor;
-            ctx.lineWidth   = selected || isOnPath ? 3.5 : 2;
+            // ── card border ───────────────────────────────────────────────────
+            roundRect(ctx, cx, cy, CARD_W, CARD_H, CARD_R);
+            ctx.strokeStyle = selected ? '#c9a84c' : isOnPath ? '#e0c97f' : hover ? 'rgba(201,168,76,0.6)' : `rgba(${br},${bg},${bb},0.5)`;
+            ctx.lineWidth   = selected || isOnPath ? 2.5 : 1.5;
             ctx.stroke();
 
-            // ── pivot ring ───────────────────────────────────────────────────
+            // ── gender accent bar (left) ──────────────────────────────────────
+            ctx.beginPath();
+            ctx.moveTo(cx + CARD_R, cy);
+            ctx.lineTo(cx + CARD_R, cy + CARD_H);
+            ctx.arcTo(cx, cy + CARD_H, cx, cy + CARD_H - CARD_R, CARD_R);
+            ctx.lineTo(cx, cy + CARD_R);
+            ctx.arcTo(cx, cy, cx + CARD_R, cy, CARD_R);
+            ctx.closePath();
+            ctx.fillStyle = selected ? '#c9a84c' : genderColor;
+            ctx.globalAlpha = isDimmed ? 0.15 : (selected ? 0.9 : 0.7);
+            ctx.fill();
+            ctx.globalAlpha = isDimmed ? 0.15 : 1;
+
+            // ── avatar circle ─────────────────────────────────────────────────
+            const avX = cx + 30;
+            const avY = cy + CARD_H / 2;
+            const avR = 18;
+            ctx.beginPath();
+            ctx.arc(avX, avY, avR, 0, 2 * Math.PI);
+            ctx.fillStyle = `rgba(${br},${bg},${bb},0.4)`;
+            ctx.fill();
+            ctx.strokeStyle = selected ? '#c9a84c' : genderColor;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // initials inside avatar
+            const initials = `${firstName[0] || ''}${(p.lastName || '')[0] || ''}`.toUpperCase();
+            ctx.font = `700 11px Outfit, -apple-system, sans-serif`;
+            ctx.fillStyle = selected ? '#fff' : '#eceae5';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(initials, avX, avY);
+
+            // ── pivot ring ────────────────────────────────────────────────────
             const pivotScore = betweennessMap.get(p.id) || 0;
             if (showPivots && pivotScore > 0.1) {
-              ctx.beginPath();
-              ctx.arc(x, y, r + 5 + pivotScore * 4, 0, 2 * Math.PI);
+              roundRect(ctx, cx - 5, cy - 5, CARD_W + 10, CARD_H + 10, CARD_R + 5);
               ctx.strokeStyle = `rgba(201,168,76,${0.3 + pivotScore * 0.6})`;
               ctx.lineWidth = 1.5;
               ctx.setLineDash([4, 3]);
@@ -353,10 +408,9 @@ export default function GraphCanvas() {
               ctx.setLineDash([]);
             }
 
-            // ── path-mode node A marker ──────────────────────────────────────
+            // ── path-mode node A marker ───────────────────────────────────────
             if (pathNodeARef.current === p.id) {
-              ctx.beginPath();
-              ctx.arc(x, y, r + 8, 0, 2 * Math.PI);
+              roundRect(ctx, cx - 6, cy - 6, CARD_W + 12, CARD_H + 12, CARD_R + 6);
               ctx.strokeStyle = 'rgba(99,202,255,0.8)';
               ctx.lineWidth = 2;
               ctx.setLineDash([3, 3]);
@@ -364,20 +418,33 @@ export default function GraphCanvas() {
               ctx.setLineDash([]);
             }
 
-            // ── name inside (cached font size) ────────────────────────────────
-            const textColor = isDimmed ? 'rgba(200,200,200,0.35)' : selected ? '#ffffff' : '#eceae5';
-            ctx.textAlign    = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillStyle    = textColor;
-            ctx.font = `600 ${nodeFs}px Outfit, -apple-system, sans-serif`;
+            // ── text ──────────────────────────────────────────────────────────
+            const textX = cx + 52;
+            const textAlpha = isDimmed ? 0.3 : 1;
 
-            const startY = y - nodeTotalH / 2 + nodeFs * 0.35;
-            ctx.fillText(firstName, x, startY);
-            ctx.fillText(lastName,  x, startY + nodeLineH);
+            // First name
+            ctx.globalAlpha = textAlpha;
+            ctx.font = `600 ${firstFs}px Outfit, -apple-system, sans-serif`;
+            ctx.fillStyle = selected ? '#fff' : '#eceae5';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(firstName, textX, cy + 22);
+
+            // Last name
+            ctx.font = `700 ${lastFs}px Outfit, -apple-system, sans-serif`;
+            ctx.fillStyle = selected ? '#c9a84c' : `rgba(${br},${bg},${bb + 80 > 255 ? 255 : bb + 80},0.95)`;
+            ctx.fillText(lastName, textX, cy + 38);
+
+            // Date
+            if (dateStr) {
+              ctx.font = `400 9px JetBrains Mono, monospace`;
+              ctx.fillStyle = isDimmed ? 'rgba(120,120,130,0.3)' : '#6a6874';
+              ctx.fillText(dateStr, textX, cy + 56);
+            }
 
             ctx.restore();
           },
-          nodeDimensions: { width: size * 2, height: size * 2 },
+          nodeDimensions: { width: CARD_W, height: CARD_H },
         }),
         title: buildTooltip(p),
       };
@@ -410,21 +477,21 @@ export default function GraphCanvas() {
     edgesRef.current = edges;
 
     const options: any = {
-      nodes: { chosen: false, scaling: { min: 26, max: 44 } },
+      nodes: { chosen: false, scaling: { min: 80, max: 80 } },
       edges: { chosen: false, selectionWidth: 2 },
       physics: (layoutMode === 'physics' && !allHavePositions) ? {
         enabled: true,
         solver: 'barnesHut',
-        barnesHut: { gravitationalConstant: -8000, centralGravity: 0.12, springLength: 300, springConstant: 0.028, damping: 0.92, avoidOverlap: 1.0 },
-        stabilization: { enabled: true, iterations: 250, updateInterval: 15, fit: true },
+        barnesHut: { gravitationalConstant: -12000, centralGravity: 0.08, springLength: 260, springConstant: 0.02, damping: 0.9, avoidOverlap: 1.0 },
+        stabilization: { enabled: true, iterations: 300, updateInterval: 15, fit: true },
       } : false,
       layout: layoutMode === 'hierarchical' ? {
-        hierarchical: { 
+        hierarchical: {
           direction: layoutDirection,
           sortMethod: 'directed',
-          levelSeparation: layoutDirection === 'LR' || layoutDirection === 'RL' ? 220 : 160,
-          nodeSpacing: layoutDirection === 'LR' || layoutDirection === 'RL' ? 120 : 180,
-          treeSpacing: 260,
+          levelSeparation: layoutDirection === 'LR' || layoutDirection === 'RL' ? 280 : 200,
+          nodeSpacing: layoutDirection === 'LR' || layoutDirection === 'RL' ? 100 : 220,
+          treeSpacing: 300,
           blockShifting: true,
           edgeMinimization: true,
           parentCentralization: true,
