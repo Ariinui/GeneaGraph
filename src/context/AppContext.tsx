@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import type { Person, Relation, Source, Branch, ViewMode, RelationType, LayoutDirection, HierarchyFocus } from '@/types/genealogy';
 import { getSampleData, BRANCH_COLORS } from '@/data/sampleData';
 import type { ParsedPerson, ParsedRelation } from '@/utils/gedcomParser';
@@ -221,13 +221,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [highlightedPath, setHighlightedPath] = useState<string[] | null>(null);
   
-  const initialCloudEnabled = localStorage.getItem(CLOUD_ENABLED_KEY) === 'true' && APPWRITE_CONFIGURED;
+  const storedCloud = localStorage.getItem(CLOUD_ENABLED_KEY);
+  const initialCloudEnabled = APPWRITE_CONFIGURED && storedCloud !== 'false';
   const [cloudEnabled, setCloudEnabled] = useState(initialCloudEnabled);
   const [cloudSyncing, setCloudSyncing] = useState(false);
   const [cloudError, setCloudError] = useState<string | null>(null);
 
   const [persons, setPersons] = useState<Person[]>(() => getInitialTree().persons);
   const [relations, setRelations] = useState<Relation[]>(() => getInitialTree().relations);
+
+  const personsRef = useRef(persons);
+  const relationsRef = useRef(relations);
+  useEffect(() => { personsRef.current = persons; }, [persons]);
+  useEffect(() => { relationsRef.current = relations; }, [relations]);
 
   const [yearRange, setYearRange] = useState<[number, number] | null>(null);
   const [showPivots, setShowPivots] = useState(false);
@@ -321,15 +327,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCloudError('Appwrite non configuré. Vérifiez vos variables d\'environnement.');
       return;
     }
-    
+
     setCloudSyncing(true);
     setCloudError(null);
-    
+
     try {
       const data = await appwriteService.loadData();
       if (data.persons.length > 0 || data.relations.length > 0) {
+        // Appwrite has data → load it (mobile gets PC's data)
         setPersons(buildPersonsWithBranches(data.persons, data.relations));
         setRelations(data.relations);
+      } else {
+        // Appwrite is empty → upload localStorage data if any
+        if (personsRef.current.length > 0) {
+          await appwriteService.syncAll(personsRef.current, relationsRef.current);
+        }
       }
     } catch (error) {
       setCloudError('Erreur de synchronisation avec le cloud');
