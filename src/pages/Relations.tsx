@@ -1,5 +1,5 @@
 import { useApp } from '@/context/AppContext';
-import { Users, Heart, Eye, Baby, ArrowRight } from 'lucide-react';
+import { Users, Heart, Eye, Baby, ArrowRight, UserCheck, ShieldCheck } from 'lucide-react';
 import { useMemo } from 'react';
 
 const relationTypes = [
@@ -18,6 +18,22 @@ const relationTypes = [
     icon: <Heart size={24} />,
     color: '#c9a84c',
     bgColor: 'rgba(201, 168, 76, 0.1)',
+  },
+  {
+    type: 'adoption' as const,
+    label: 'Adoption',
+    description: 'Liens d\'adoption légale. Distincts de la filiation biologique, fréquents dans les archives.',
+    icon: <UserCheck size={24} />,
+    color: '#f97316',
+    bgColor: 'rgba(249, 115, 22, 0.1)',
+  },
+  {
+    type: 'tutelle' as const,
+    label: 'Tutelle',
+    description: 'Liens de tutelle légale d\'un orphelin confié à un tuteur. Courant dans les actes notariés.',
+    icon: <ShieldCheck size={24} />,
+    color: '#06b6d4',
+    bgColor: 'rgba(6, 182, 212, 0.1)',
   },
   {
     type: 'witness' as const,

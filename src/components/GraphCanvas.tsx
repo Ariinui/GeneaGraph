@@ -133,14 +133,13 @@ export default function GraphCanvas() {
           opacity: isPathEdge ? 1 : 0.75,
         },
         width: isPathEdge ? 3 : 1.5,
-        dashes: r.type === 'parent'
-          ? [8, 4]
-          : r.type === 'witness'
-          ? [3, 3]
-          : r.type === 'godparent'
-          ? [10, 3, 3, 3]
-          : false,
-        arrows: r.type === 'parent'
+        dashes: r.type === 'parent'    ? [8, 4]
+              : r.type === 'adoption'  ? [5, 3, 2, 3]
+              : r.type === 'tutelle'   ? [2, 4]
+              : r.type === 'witness'   ? [3, 3]
+              : r.type === 'godparent' ? [10, 3, 3, 3]
+              : false,
+        arrows: (r.type === 'parent' || r.type === 'adoption' || r.type === 'tutelle')
           ? { to: { enabled: true, scaleFactor: 0.45 } }
           : undefined,
         font: {
@@ -401,10 +400,12 @@ export default function GraphCanvas() {
           </div>
           <div className="w-full h-px bg-[#1e1e28] my-0.5" />
           {[
-            { color: '#4a9eff', dash: true, label: 'Parenté' },
-            { color: '#c9a84c', dash: false, label: 'Alliance' },
-            { color: '#8b5cf6', dash: true, label: 'Témoin', dotted: true },
-            { color: '#10b981', dash: false, label: 'Parrainage' },
+            { color: '#4a9eff', label: 'Parenté' },
+            { color: '#c9a84c', label: 'Alliance' },
+            { color: '#f97316', label: 'Adoption' },
+            { color: '#06b6d4', label: 'Tutelle' },
+            { color: '#8b5cf6', label: 'Témoin' },
+            { color: '#10b981', label: 'Parrainage' },
           ].map(({ color, label }) => (
             <div key={label} className="flex items-center gap-2.5">
               <div className="w-5 h-0 border-t-2" style={{ borderColor: color }} />
@@ -495,11 +496,13 @@ export default function GraphCanvas() {
 
 function getRelationColor(type: string): string {
   switch (type) {
-    case 'parent': return '#4a9eff';
-    case 'alliance': return '#c9a84c';
-    case 'witness': return '#8b5cf6';
+    case 'parent':    return '#4a9eff';
+    case 'alliance':  return '#c9a84c';
+    case 'adoption':  return '#f97316';
+    case 'tutelle':   return '#06b6d4';
+    case 'witness':   return '#8b5cf6';
     case 'godparent': return '#10b981';
-    default: return '#8a8894';
+    default:          return '#8a8894';
   }
 }
 

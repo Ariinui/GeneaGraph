@@ -136,6 +136,7 @@ export function parseGedcom(content: string): GedcomParseResult {
     deat?: { date?: string; place?: string };
     occu?: string;
     note?: string;
+    adop?: string; // gedId of adoptive family
   }
 
   interface FamRecord {
@@ -185,6 +186,7 @@ export function parseGedcom(content: string): GedcomParseResult {
           case 'NOTE': rec.note = line.value; break;
           case 'BIRT': if (!rec.birt) rec.birt = {}; break;
           case 'DEAT': if (!rec.deat) rec.deat = {}; break;
+          case 'ADOP': rec.adop = line.value; break;
         }
       } else if (curType === 'FAM') {
         const rec = families.get(curId)!;
@@ -256,11 +258,15 @@ export function parseGedcom(content: string): GedcomParseResult {
       relations.push({ from: husbId, to: wifeId, type: 'alliance' });
     }
 
-    // Parent → child
+    // Parent → child (or adoption if flagged)
     for (const childRef of fam.chil) {
       if (!gedIdSet.has(childRef)) { skipped++; continue; }
-      if (husbId) relations.push({ from: husbId, to: childRef, type: 'parent' });
-      if (wifeId) relations.push({ from: wifeId, to: childRef, type: 'parent' });
+      // Check if child record has ADOP tag pointing to this family
+      const childRec = individuals.get(childRef);
+      const isAdopted = childRec?.adop === fam.gedId;
+      const relType: RelationType = isAdopted ? 'adoption' : 'parent';
+      if (husbId) relations.push({ from: husbId, to: childRef, type: relType });
+      if (wifeId) relations.push({ from: wifeId, to: childRef, type: relType });
     }
   }
 

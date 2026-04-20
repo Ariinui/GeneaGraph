@@ -1,6 +1,6 @@
 export type Gender = 'M' | 'F';
 
-export type RelationType = 'parent' | 'alliance' | 'witness' | 'godparent';
+export type RelationType = 'parent' | 'alliance' | 'witness' | 'godparent' | 'adoption' | 'tutelle';
 
 export interface Person {
   id: string;

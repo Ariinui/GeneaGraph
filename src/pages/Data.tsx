@@ -14,10 +14,12 @@ import type { GedcomParseResult } from '@/utils/gedcomParser';
 const EMPTY_PERSON: Partial<Person> = { gender: 'M' };
 
 const RELATION_TYPES: { value: RelationType; label: string; color: string }[] = [
-  { value: 'parent',     label: 'Parenté',    color: '#4a9eff' },
-  { value: 'alliance',   label: 'Alliance',   color: '#c9a84c' },
-  { value: 'witness',    label: 'Témoin',     color: '#8b5cf6' },
-  { value: 'godparent',  label: 'Parrainage', color: '#10b981' },
+  { value: 'parent',    label: 'Parenté',    color: '#4a9eff' },
+  { value: 'alliance',  label: 'Alliance',   color: '#c9a84c' },
+  { value: 'adoption',  label: 'Adoption',   color: '#f97316' },
+  { value: 'tutelle',   label: 'Tutelle',    color: '#06b6d4' },
+  { value: 'witness',   label: 'Témoin',     color: '#8b5cf6' },
+  { value: 'godparent', label: 'Parrainage', color: '#10b981' },
 ];
 
 function PersonForm({

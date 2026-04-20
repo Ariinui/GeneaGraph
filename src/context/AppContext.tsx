@@ -183,7 +183,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [layoutMode, setLayoutMode] = useState<'physics' | 'hierarchical'>('physics');
-  const [activeFilters, setActiveFilters] = useState<RelationType[]>(['parent', 'alliance', 'witness', 'godparent']);
+  const [activeFilters, setActiveFilters] = useState<RelationType[]>(['parent', 'alliance', 'witness', 'godparent', 'adoption', 'tutelle']);
   const [activeBranchFilters, setActiveBranchFilters] = useState<string[]>([]);
   const [hoveredPersonId, setHoveredPersonId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');

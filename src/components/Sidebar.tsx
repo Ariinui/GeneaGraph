@@ -14,9 +14,11 @@ const navItems: { mode: ViewMode; path: string; label: string; icon: React.React
 ];
 
 const relationFilterConfig: { type: RelationType; label: string; color: string }[] = [
-  { type: 'parent', label: 'Parenté', color: '#4a9eff' },
-  { type: 'alliance', label: 'Alliance', color: '#c9a84c' },
-  { type: 'witness', label: 'Témoin', color: '#8b5cf6' },
+  { type: 'parent',    label: 'Parenté',    color: '#4a9eff' },
+  { type: 'alliance',  label: 'Alliance',   color: '#c9a84c' },
+  { type: 'adoption',  label: 'Adoption',   color: '#f97316' },
+  { type: 'tutelle',   label: 'Tutelle',    color: '#06b6d4' },
+  { type: 'witness',   label: 'Témoin',     color: '#8b5cf6' },
   { type: 'godparent', label: 'Parrainage', color: '#10b981' },
 ];
 
