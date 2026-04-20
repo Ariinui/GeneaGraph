@@ -3,7 +3,7 @@ import { Network, DataSet } from 'vis-network/standalone';
 import { Plus, Link2, GitMerge, ArrowDown, ArrowUp, ArrowRight, ArrowLeft, Download, Users } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useApp } from '@/context/AppContext';
-import type { Person, Relation, LayoutDirection, HierarchyFocus } from '@/types/genealogy';
+import type { Relation, LayoutDirection, HierarchyFocus } from '@/types/genealogy';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -25,44 +25,6 @@ function getRelationColor(type: string): string {
   }
 }
 
-function buildTooltip(person: Person): HTMLElement {
-  const el = document.createElement('div');
-  el.style.cssText = 'background:#1a1a28;border:1px solid #2a2a3a;border-radius:10px;padding:12px 14px;min-width:170px;font-family:Outfit,system-ui,sans-serif;box-shadow:0 8px 32px rgba(0,0,0,0.5);';
-
-  const header = document.createElement('div');
-  header.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;';
-  const badge = document.createElement('div');
-  badge.style.cssText = `width:10px;height:10px;border-radius:50%;border:2px solid ${person.gender === 'M' ? '#4a9eff' : '#f472b6'};background:${person.gender === 'M' ? '#0f1c2e' : '#200e1e'};flex-shrink:0;`;
-  header.appendChild(badge);
-  const name = document.createElement('div');
-  name.style.cssText = 'font-size:13px;font-weight:600;color:#e8e6e1;';
-  name.textContent = `${person.firstName} ${person.lastName}`;
-  header.appendChild(name);
-  el.appendChild(header);
-
-  const years: string[] = [];
-  if (person.birthDate) years.push(`∗ ${person.birthDate.split('-')[0]}`);
-  if (person.deathDate) years.push(`† ${person.deathDate.split('-')[0]}`);
-  if (years.length) {
-    const d = document.createElement('div');
-    d.style.cssText = 'font-size:11px;color:#7a7884;margin-bottom:3px;';
-    d.textContent = years.join('  ·  ');
-    el.appendChild(d);
-  }
-  if (person.occupation) {
-    const o = document.createElement('div');
-    o.style.cssText = 'font-size:11px;color:#c9a84c;margin-top:4px;';
-    o.textContent = person.occupation;
-    el.appendChild(o);
-  }
-  if (person.birthPlace) {
-    const pl = document.createElement('div');
-    pl.style.cssText = 'font-size:10px;color:#4a4854;margin-top:3px;';
-    pl.textContent = `📍 ${person.birthPlace}`;
-    el.appendChild(pl);
-  }
-  return el;
-}
 
 function isEdgeOnPath(edge: Relation, path: string[]): boolean {
   for (let i = 0; i < path.length - 1; i++) {
@@ -280,10 +242,13 @@ export default function GraphCanvas() {
     // ── shared canvas for font-size pre-computation ───────────────────────────
     const measureCtx = document.createElement('canvas').getContext('2d')!;
 
-    // Card dimensions
-    const CARD_W = 160;
-    const CARD_H = 72;
-    const CARD_R = 10; // border-radius
+    // Node circle radius
+    const CR = 48;
+
+    // Hover card dimensions
+    const HC_W = 196;
+    const HC_H_BASE = 62;
+    const HC_R = 10;
 
     function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
       ctx.beginPath();
@@ -300,23 +265,24 @@ export default function GraphCanvas() {
     }
 
     const nodesData = visiblePersons.map(p => {
-      const branchColor = p.branch ? (branchColorMap.get(p.branch) || '#4a5568') : '#4a5568';
+      const branchColor = p.branch ? (branchColorMap.get(p.branch) || '#5a7a9a') : '#5a7a9a';
       const genderColor = p.gender === 'M' ? '#4a9eff' : '#f472b6';
       const firstName   = p.firstName || '';
-      const lastName    = (p.lastName || '').toUpperCase();
+      const lastName    = p.lastName  || '';
+      const lastNameUp  = lastName.toUpperCase();
       const [br, bg, bb] = hexToRgb(branchColor);
 
-      // Pre-compute font sizes
-      const maxNameW = CARD_W - 52;
+      // Pre-compute font sizes for inside circle
+      const maxW = CR * 1.55;
       let firstFs = 13;
       measureCtx.font = `600 ${firstFs}px Outfit, -apple-system, sans-serif`;
-      while (measureCtx.measureText(firstName).width > maxNameW && firstFs > 9) {
+      while (measureCtx.measureText(firstName).width > maxW && firstFs > 8) {
         firstFs--;
         measureCtx.font = `600 ${firstFs}px Outfit, -apple-system, sans-serif`;
       }
       let lastFs = 11;
       measureCtx.font = `700 ${lastFs}px Outfit, -apple-system, sans-serif`;
-      while (measureCtx.measureText(lastName).width > maxNameW && lastFs > 8) {
+      while (measureCtx.measureText(lastNameUp).width > maxW && lastFs > 8) {
         lastFs--;
         measureCtx.font = `700 ${lastFs}px Outfit, -apple-system, sans-serif`;
       }
@@ -328,7 +294,7 @@ export default function GraphCanvas() {
       return {
         id: p.id,
         label: '',
-        size: Math.max(CARD_W, CARD_H) / 2,
+        size: CR,
         x: savedPositions[p.id]?.x,
         y: savedPositions[p.id]?.y,
         shape: 'custom' as const,
@@ -336,71 +302,48 @@ export default function GraphCanvas() {
           drawNode() {
             const isDimmed = dimmedRef.current.has(p.id);
             const isOnPath = highlightedPathRef.current?.includes(p.id) || false;
-            const cx = x - CARD_W / 2;
-            const cy = y - CARD_H / 2;
+            const showCard = (hover || selected) && !isDimmed;
 
             ctx.save();
             ctx.globalAlpha = isDimmed ? 0.15 : 1;
 
-            // ── drop shadow ───────────────────────────────────────────────────
+            // ── glow / shadow ─────────────────────────────────────────────────
             if (!isDimmed) {
-              ctx.shadowColor = selected ? 'rgba(201,168,76,0.6)' : isOnPath ? 'rgba(201,168,76,0.35)' : 'rgba(0,0,0,0.6)';
-              ctx.shadowBlur  = selected ? 20 : isOnPath ? 14 : 10;
-              ctx.shadowOffsetY = selected ? 0 : 3;
+              ctx.shadowColor  = selected ? 'rgba(201,168,76,0.75)' : isOnPath ? 'rgba(201,168,76,0.4)' : hover ? `rgba(${br},${bg},${bb},0.5)` : 'rgba(0,0,0,0.55)';
+              ctx.shadowBlur   = selected ? 26 : isOnPath ? 16 : hover ? 20 : 10;
+              ctx.shadowOffsetY = (selected || hover) ? 0 : 3;
             }
 
-            // ── card background ───────────────────────────────────────────────
-            roundRect(ctx, cx, cy, CARD_W, CARD_H, CARD_R);
-            const bg2 = ctx.createLinearGradient(cx, cy, cx, cy + CARD_H);
-            bg2.addColorStop(0, `rgba(${br},${bg},${bb},${selected ? 0.38 : 0.22})`);
-            bg2.addColorStop(1, `rgba(${br},${bg},${bb},${selected ? 0.25 : 0.12})`);
-            ctx.fillStyle = bg2;
+            // ── circle fill ───────────────────────────────────────────────────
+            ctx.beginPath();
+            ctx.arc(x, y, CR, 0, 2 * Math.PI);
+            const grad = ctx.createRadialGradient(x - CR * 0.25, y - CR * 0.25, CR * 0.08, x, y, CR);
+            grad.addColorStop(0, `rgba(${br},${bg},${bb},${selected ? 0.60 : hover ? 0.48 : 0.32})`);
+            grad.addColorStop(1, `rgba(${br},${bg},${bb},${selected ? 0.30 : hover ? 0.22 : 0.12})`);
+            ctx.fillStyle = grad;
             ctx.fill();
             ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
 
-            // ── card border ───────────────────────────────────────────────────
-            roundRect(ctx, cx, cy, CARD_W, CARD_H, CARD_R);
-            ctx.strokeStyle = selected ? '#c9a84c' : isOnPath ? '#e0c97f' : hover ? 'rgba(201,168,76,0.6)' : `rgba(${br},${bg},${bb},0.5)`;
-            ctx.lineWidth   = selected || isOnPath ? 2.5 : 1.5;
+            // ── circle border ─────────────────────────────────────────────────
+            ctx.strokeStyle = selected ? '#c9a84c' : isOnPath ? '#e0c97f' : hover ? '#c9a84c' : genderColor;
+            ctx.lineWidth   = selected || isOnPath ? 3 : hover ? 2.5 : 2;
             ctx.stroke();
 
-            // ── gender accent bar (left) ──────────────────────────────────────
+            // ── gender dot (top-right) ────────────────────────────────────────
+            const dotX = x + CR * 0.68;
+            const dotY = y - CR * 0.68;
             ctx.beginPath();
-            ctx.moveTo(cx + CARD_R, cy);
-            ctx.lineTo(cx + CARD_R, cy + CARD_H);
-            ctx.arcTo(cx, cy + CARD_H, cx, cy + CARD_H - CARD_R, CARD_R);
-            ctx.lineTo(cx, cy + CARD_R);
-            ctx.arcTo(cx, cy, cx + CARD_R, cy, CARD_R);
-            ctx.closePath();
-            ctx.fillStyle = selected ? '#c9a84c' : genderColor;
-            ctx.globalAlpha = isDimmed ? 0.15 : (selected ? 0.9 : 0.7);
+            ctx.arc(dotX, dotY, 6, 0, 2 * Math.PI);
+            ctx.fillStyle = genderColor;
+            ctx.globalAlpha = isDimmed ? 0.15 : 0.95;
             ctx.fill();
             ctx.globalAlpha = isDimmed ? 0.15 : 1;
-
-            // ── avatar circle ─────────────────────────────────────────────────
-            const avX = cx + 30;
-            const avY = cy + CARD_H / 2;
-            const avR = 18;
-            ctx.beginPath();
-            ctx.arc(avX, avY, avR, 0, 2 * Math.PI);
-            ctx.fillStyle = `rgba(${br},${bg},${bb},0.4)`;
-            ctx.fill();
-            ctx.strokeStyle = selected ? '#c9a84c' : genderColor;
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-
-            // initials inside avatar
-            const initials = `${firstName[0] || ''}${(p.lastName || '')[0] || ''}`.toUpperCase();
-            ctx.font = `700 11px Outfit, -apple-system, sans-serif`;
-            ctx.fillStyle = selected ? '#fff' : '#eceae5';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(initials, avX, avY);
 
             // ── pivot ring ────────────────────────────────────────────────────
             const pivotScore = betweennessMap.get(p.id) || 0;
             if (showPivots && pivotScore > 0.1) {
-              roundRect(ctx, cx - 5, cy - 5, CARD_W + 10, CARD_H + 10, CARD_R + 5);
+              ctx.beginPath();
+              ctx.arc(x, y, CR + 6 + pivotScore * 6, 0, 2 * Math.PI);
               ctx.strokeStyle = `rgba(201,168,76,${0.3 + pivotScore * 0.6})`;
               ctx.lineWidth = 1.5;
               ctx.setLineDash([4, 3]);
@@ -410,7 +353,8 @@ export default function GraphCanvas() {
 
             // ── path-mode node A marker ───────────────────────────────────────
             if (pathNodeARef.current === p.id) {
-              roundRect(ctx, cx - 6, cy - 6, CARD_W + 12, CARD_H + 12, CARD_R + 6);
+              ctx.beginPath();
+              ctx.arc(x, y, CR + 10, 0, 2 * Math.PI);
               ctx.strokeStyle = 'rgba(99,202,255,0.8)';
               ctx.lineWidth = 2;
               ctx.setLineDash([3, 3]);
@@ -418,35 +362,101 @@ export default function GraphCanvas() {
               ctx.setLineDash([]);
             }
 
-            // ── text ──────────────────────────────────────────────────────────
-            const textX = cx + 52;
-            const textAlpha = isDimmed ? 0.3 : 1;
-
-            // First name
-            ctx.globalAlpha = textAlpha;
+            // ── name inside circle ────────────────────────────────────────────
+            ctx.globalAlpha = isDimmed ? 0.3 : 1;
+            ctx.textAlign    = 'center';
+            ctx.textBaseline = 'middle';
+            const lineH = Math.max(firstFs, lastFs) + 3;
             ctx.font = `600 ${firstFs}px Outfit, -apple-system, sans-serif`;
             ctx.fillStyle = selected ? '#fff' : '#eceae5';
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(firstName, textX, cy + 22);
-
-            // Last name
+            ctx.fillText(firstName, x, y - lineH / 2);
             ctx.font = `700 ${lastFs}px Outfit, -apple-system, sans-serif`;
-            ctx.fillStyle = selected ? '#c9a84c' : `rgba(${br},${bg},${bb + 80 > 255 ? 255 : bb + 80},0.95)`;
-            ctx.fillText(lastName, textX, cy + 38);
+            ctx.fillStyle = selected ? '#c9a84c' : `rgba(${Math.min(br+60,255)},${Math.min(bg+60,255)},${Math.min(bb+80,255)},0.95)`;
+            ctx.fillText(lastNameUp, x, y + lineH / 2);
 
-            // Date
-            if (dateStr) {
-              ctx.font = `400 9px JetBrains Mono, monospace`;
-              ctx.fillStyle = isDimmed ? 'rgba(120,120,130,0.3)' : '#6a6874';
-              ctx.fillText(dateStr, textX, cy + 56);
+            // ── hover card (appears above circle) ─────────────────────────────
+            if (showCard) {
+              const extraH  = (dateStr ? 16 : 0) + (p.occupation ? 16 : 0);
+              const HC_H    = HC_H_BASE + extraH;
+              const cardX   = x - HC_W / 2;
+              const cardY   = y - CR - HC_H - 14;
+
+              // connector
+              ctx.globalAlpha = 0.5;
+              ctx.beginPath();
+              ctx.moveTo(x, cardY + HC_H + 1);
+              ctx.lineTo(x, y - CR - 2);
+              ctx.strokeStyle = `rgba(${br},${bg},${bb},0.6)`;
+              ctx.lineWidth = 1.5;
+              ctx.setLineDash([3, 4]);
+              ctx.stroke();
+              ctx.setLineDash([]);
+              ctx.globalAlpha = 1;
+
+              // card shadow
+              ctx.shadowColor  = 'rgba(0,0,0,0.75)';
+              ctx.shadowBlur   = 24;
+              ctx.shadowOffsetY = 6;
+
+              // card bg
+              roundRect(ctx, cardX, cardY, HC_W, HC_H, HC_R);
+              ctx.fillStyle = 'rgba(12,12,22,0.97)';
+              ctx.fill();
+              ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+
+              // card border
+              roundRect(ctx, cardX, cardY, HC_W, HC_H, HC_R);
+              ctx.strokeStyle = selected ? '#c9a84c' : `rgba(${br},${bg},${bb},0.65)`;
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+
+              // left gender bar
+              ctx.beginPath();
+              ctx.moveTo(cardX + HC_R, cardY);
+              ctx.lineTo(cardX + HC_R, cardY + HC_H);
+              ctx.arcTo(cardX, cardY + HC_H, cardX, cardY + HC_H - HC_R, HC_R);
+              ctx.lineTo(cardX, cardY + HC_R);
+              ctx.arcTo(cardX, cardY, cardX + HC_R, cardY, HC_R);
+              ctx.closePath();
+              ctx.fillStyle = genderColor;
+              ctx.globalAlpha = 0.85;
+              ctx.fill();
+              ctx.globalAlpha = 1;
+
+              // card text
+              const tx = cardX + 18;
+              let ty   = cardY + 18;
+              ctx.textAlign    = 'left';
+              ctx.textBaseline = 'top';
+
+              ctx.font = `600 14px Outfit, -apple-system, sans-serif`;
+              ctx.fillStyle = '#f0ede8';
+              ctx.fillText(firstName, tx, ty);
+              ty += 18;
+
+              ctx.font = `700 12px Outfit, -apple-system, sans-serif`;
+              ctx.fillStyle = '#c9a84c';
+              ctx.fillText(lastNameUp, tx, ty);
+              ty += 16;
+
+              if (dateStr) {
+                ctx.font = `400 10px JetBrains Mono, monospace`;
+                ctx.fillStyle = '#7a7884';
+                ctx.fillText(dateStr, tx, ty);
+                ty += 15;
+              }
+              if (p.occupation) {
+                ctx.font = `400 10px Outfit, -apple-system, sans-serif`;
+                ctx.fillStyle = '#9a8a5a';
+                ctx.fillText(p.occupation, tx, ty);
+              }
             }
 
             ctx.restore();
           },
-          nodeDimensions: { width: CARD_W, height: CARD_H },
+          nodeDimensions: { width: CR * 2, height: CR * 2 },
         }),
-        title: buildTooltip(p),
+        title: undefined,
       };
     });
 
@@ -477,13 +487,13 @@ export default function GraphCanvas() {
     edgesRef.current = edges;
 
     const options: any = {
-      nodes: { chosen: false, scaling: { min: 80, max: 80 } },
+      nodes: { chosen: false, scaling: { min: CR, max: CR } },
       edges: { chosen: false, selectionWidth: 2 },
       physics: (layoutMode === 'physics' && !allHavePositions) ? {
         enabled: true,
         solver: 'barnesHut',
-        barnesHut: { gravitationalConstant: -12000, centralGravity: 0.08, springLength: 260, springConstant: 0.02, damping: 0.9, avoidOverlap: 1.0 },
-        stabilization: { enabled: true, iterations: 300, updateInterval: 15, fit: true },
+        barnesHut: { gravitationalConstant: -14000, centralGravity: 0.06, springLength: 280, springConstant: 0.018, damping: 0.88, avoidOverlap: 1.0 },
+        stabilization: { enabled: true, iterations: 350, updateInterval: 15, fit: true },
       } : false,
       layout: layoutMode === 'hierarchical' ? {
         hierarchical: {
@@ -516,43 +526,61 @@ export default function GraphCanvas() {
       }
     });
 
-    const savePositions = () => {
+    const viewportKey = (mode: string) => `geneagraph:viewport:${mode}`;
+
+    const saveState = () => {
       try {
-        const positions = network.getPositions();
-        const cacheKey = positionsKey(layoutMode);
-        
-        // Save to in-memory cache (immediate, survives recreation)
-        globalPositionsCache.set(cacheKey, positions);
-        
-        // Save to localStorage (persistent across sessions)
-        localStorage.setItem(cacheKey, JSON.stringify(positions));
+        if (layoutMode === 'physics') {
+          // Save node positions
+          const positions = network.getPositions();
+          globalPositionsCache.set(cacheKey, positions);
+          localStorage.setItem(cacheKey, JSON.stringify(positions));
+        }
+        // Always save viewport (zoom + pan) for both modes
+        const vp = { position: network.getViewPosition(), scale: network.getScale() };
+        localStorage.setItem(viewportKey(layoutMode), JSON.stringify(vp));
       } catch {}
     };
 
-    // Save positions before destroying
     const saveAndCleanup = () => {
       if (networkRef.current && !destroyed) {
         try {
-          const positions = networkRef.current.getPositions();
-          const cacheKey = positionsKey(lastLayoutModeRef.current);
-          globalPositionsCache.set(cacheKey, positions);
-          localStorage.setItem(cacheKey, JSON.stringify(positions));
+          if (lastLayoutModeRef.current === 'physics') {
+            const positions = networkRef.current.getPositions();
+            globalPositionsCache.set(positionsKey(lastLayoutModeRef.current), positions);
+            localStorage.setItem(positionsKey(lastLayoutModeRef.current), JSON.stringify(positions));
+          }
+          const vp = { position: networkRef.current.getViewPosition(), scale: networkRef.current.getScale() };
+          localStorage.setItem(viewportKey(lastLayoutModeRef.current), JSON.stringify(vp));
         } catch {}
       }
     };
 
+    const restoreViewport = (animate: boolean) => {
+      try {
+        const raw = localStorage.getItem(viewportKey(layoutMode));
+        if (raw) {
+          const vp = JSON.parse(raw);
+          network.moveTo({ position: vp.position, scale: vp.scale, animation: animate ? { duration: 500, easingFunction: 'easeOutQuart' } : false });
+          return true;
+        }
+      } catch {}
+      return false;
+    };
+
     if (layoutMode === 'hierarchical') {
-      // vis-network places nodes directly; stabilizationIterationsDone won't fire with physics:false
       setTimeout(() => {
         if (!destroyed) {
-          network.fit({ animation: { duration: 600, easingFunction: 'easeOutQuart' } });
-          savePositions();
+          const restored = restoreViewport(true);
+          if (!restored) network.fit({ animation: { duration: 600, easingFunction: 'easeOutQuart' } });
+          saveState();
         }
-      }, 400);
+      }, 450);
     } else if (allHavePositions) {
       requestAnimationFrame(() => {
         if (!destroyed) {
-          network.fit({ animation: { duration: 600, easingFunction: 'easeOutQuart' } });
+          const restored = restoreViewport(true);
+          if (!restored) network.fit({ animation: { duration: 600, easingFunction: 'easeOutQuart' } });
         }
       });
     } else {
@@ -560,15 +588,14 @@ export default function GraphCanvas() {
         if (!destroyed) {
           network.setOptions({ physics: false });
           network.fit({ animation: { duration: 600, easingFunction: 'easeOutQuart' } });
-          savePositions();
+          saveState();
         }
       });
     }
 
-    network.on('dragEnd', () => { if (!destroyed) savePositions(); });
-    
-    // Save positions when a node is released after dragging
-    network.on('release', () => { if (!destroyed) savePositions(); });
+    network.on('dragEnd', () => { if (!destroyed) saveState(); });
+    network.on('release', () => { if (!destroyed) saveState(); });
+    network.on('zoom',    () => { if (!destroyed) saveState(); });
 
     network.on('click', (params: any) => {
       const clickedId: string | null = params.nodes?.length > 0 ? params.nodes[0] : null;
