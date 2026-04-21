@@ -203,7 +203,7 @@ export default function GraphCanvas() {
 
       edges.update(edges.getIds().map((id: any) => ({
         id,
-        color: { opacity: connectedEdges.has(id) ? 0.9 : 0.08, color: getRelationColor(filteredRelations.find(r => r.id === id)?.type || '') },
+        color: { opacity: connectedEdges.has(id) ? 0.9 : 0.25, color: getRelationColor(filteredRelations.find(r => r.id === id)?.type || '') },
       })));
     } else {
       dimmedRef.current = new Set();
@@ -238,6 +238,36 @@ export default function GraphCanvas() {
     }
     
     const allHavePositions = layoutMode === 'physics' && visiblePersons.length > 0 && visiblePersons.every(p => savedPositions[p.id]);
+
+    // ── BFS genealogical levels (hierarchy mode only) ─────────────────────────
+    const genLevels: Record<string, number> = {};
+    if (layoutMode === 'hierarchical') {
+      const parentEdges = filteredRelations.filter(r => r.type === 'parent' || r.type === 'adoption');
+      const childrenOf = new Map<string, string[]>();
+      const parentsOf  = new Map<string, string[]>();
+      visiblePersons.forEach(p => { childrenOf.set(p.id, []); parentsOf.set(p.id, []); });
+      parentEdges.forEach(r => {
+        childrenOf.get(r.from)?.push(r.to);
+        parentsOf.get(r.to)?.push(r.from);
+      });
+      const roots = visiblePersons.filter(p => (parentsOf.get(p.id) || []).length === 0).map(p => p.id);
+      const queue: [string, number][] = roots.map(id => [id, 0]);
+      const visited = new Set<string>();
+      while (queue.length > 0) {
+        const [id, level] = queue.shift()!;
+        if (visited.has(id)) continue;
+        visited.add(id);
+        genLevels[id] = level;
+        for (const childId of childrenOf.get(id) || []) queue.push([childId, level + 1]);
+      }
+      visiblePersons.forEach(p => { if (genLevels[p.id] === undefined) genLevels[p.id] = 0; });
+      // Alliance partners must share the same level
+      filteredRelations.filter(r => r.type === 'alliance').forEach(r => {
+        const l = Math.max(genLevels[r.from] ?? 0, genLevels[r.to] ?? 0);
+        genLevels[r.from] = l;
+        genLevels[r.to]   = l;
+      });
+    }
 
     // ── shared canvas for font-size pre-computation ───────────────────────────
     const measureCtx = document.createElement('canvas').getContext('2d')!;
@@ -297,6 +327,7 @@ export default function GraphCanvas() {
         size: CR,
         x: savedPositions[p.id]?.x,
         y: savedPositions[p.id]?.y,
+        level: layoutMode === 'hierarchical' ? (genLevels[p.id] ?? 0) : undefined,
         shape: 'custom' as const,
         ctxRenderer: ({ ctx, x, y, state: { selected, hover } }: any) => ({
           drawNode() {
