@@ -245,10 +245,10 @@ export default function GraphCanvas() {
     // Node circle radius
     const CR = 48;
 
-    // Hover card dimensions
-    const HC_W = 196;
-    const HC_H_BASE = 62;
-    const HC_R = 10;
+    // Hover card dimensions (larger for better readability)
+    const HC_W = 280;
+    const HC_H_BASE = 90;
+    const HC_R = 12;
 
     function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
       ctx.beginPath();
@@ -376,10 +376,10 @@ export default function GraphCanvas() {
 
             // ── hover card (appears above circle) ─────────────────────────────
             if (showCard) {
-              const extraH  = (dateStr ? 16 : 0) + (p.occupation ? 16 : 0);
+              const extraH  = (dateStr ? 22 : 0) + (p.occupation ? 22 : 0) + (p.birthPlace ? 20 : 0);
               const HC_H    = HC_H_BASE + extraH;
               const cardX   = x - HC_W / 2;
-              const cardY   = y - CR - HC_H - 14;
+              const cardY   = y - CR - HC_H - 18;
 
               // connector
               ctx.globalAlpha = 0.5;
@@ -424,31 +424,37 @@ export default function GraphCanvas() {
               ctx.globalAlpha = 1;
 
               // card text
-              const tx = cardX + 18;
-              let ty   = cardY + 18;
+              const tx = cardX + 22;
+              let ty   = cardY + 22;
               ctx.textAlign    = 'left';
               ctx.textBaseline = 'top';
 
-              ctx.font = `600 14px Outfit, -apple-system, sans-serif`;
+              ctx.font = `600 18px Outfit, -apple-system, sans-serif`;
               ctx.fillStyle = '#f0ede8';
               ctx.fillText(firstName, tx, ty);
-              ty += 18;
+              ty += 24;
 
-              ctx.font = `700 12px Outfit, -apple-system, sans-serif`;
+              ctx.font = `700 15px Outfit, -apple-system, sans-serif`;
               ctx.fillStyle = '#c9a84c';
               ctx.fillText(lastNameUp, tx, ty);
-              ty += 16;
+              ty += 22;
 
               if (dateStr) {
-                ctx.font = `400 10px JetBrains Mono, monospace`;
-                ctx.fillStyle = '#7a7884';
+                ctx.font = `400 12px JetBrains Mono, monospace`;
+                ctx.fillStyle = '#9a98a4';
                 ctx.fillText(dateStr, tx, ty);
-                ty += 15;
+                ty += 20;
               }
               if (p.occupation) {
-                ctx.font = `400 10px Outfit, -apple-system, sans-serif`;
-                ctx.fillStyle = '#9a8a5a';
+                ctx.font = `400 12px Outfit, -apple-system, sans-serif`;
+                ctx.fillStyle = '#b8a86a';
                 ctx.fillText(p.occupation, tx, ty);
+                ty += 20;
+              }
+              if (p.birthPlace) {
+                ctx.font = `400 11px Outfit, -apple-system, sans-serif`;
+                ctx.fillStyle = '#6a8894';
+                ctx.fillText(`📍 ${p.birthPlace}`, tx, ty);
               }
             }
 
