@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
-import { TreePine, FileText, Database, GitBranch, Search, X, ChevronLeft, ChevronRight, Clock, BarChart3, Menu } from 'lucide-react';
+import { TreePine, FileText, Database, GitBranch, Search, X, ChevronLeft, ChevronRight, Clock, BarChart3, Menu, Plus, Trash2, Check } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import type { RelationType, ViewMode } from '@/types/genealogy';
 
@@ -34,7 +34,17 @@ export default function Sidebar() {
     relations,
     yearRange,
     setYearRange,
+    branches,
+    createBranch,
+    deleteBranch,
+    activeBranchFilters,
+    toggleBranchFilter,
   } = useApp();
+
+  const [branchSearch, setBranchSearch] = useState('');
+  const [selectedPersons, setSelectedPersons] = useState<Set<string>>(new Set());
+  const [newBranchName, setNewBranchName] = useState('');
+  const [showBranchCreator, setShowBranchCreator] = useState(false);
 
   const birthYears = persons.map(p => p.birthDate ? parseInt(p.birthDate) : NaN).filter(y => !isNaN(y) && y > 1000 && y < 2100);
   const dataMin = birthYears.length ? Math.min(...birthYears) : 1700;
@@ -61,6 +71,33 @@ export default function Sidebar() {
   }).length;
 
   const [collapsed, setCollapsed] = useState(true);
+
+  const branchSearchResults = branchSearch.length > 1
+    ? persons.filter((p) =>
+        `${p.firstName} ${p.lastName}`.toLowerCase().includes(branchSearch.toLowerCase())
+      )
+    : [];
+
+  const togglePersonSelection = (personId: string) => {
+    setSelectedPersons(prev => {
+      const next = new Set(prev);
+      if (next.has(personId)) {
+        next.delete(personId);
+      } else {
+        next.add(personId);
+      }
+      return next;
+    });
+  };
+
+  const handleCreateBranch = () => {
+    if (selectedPersons.size === 0 || !newBranchName.trim()) return;
+    createBranch(newBranchName.trim(), Array.from(selectedPersons));
+    setNewBranchName('');
+    setSelectedPersons(new Set());
+    setShowBranchCreator(false);
+    setBranchSearch('');
+  };
 
   const allPersons = persons;
   const searchResults = searchQuery.length > 1
@@ -290,6 +327,120 @@ export default function Sidebar() {
                 className="w-full h-1 cursor-pointer accent-[#c9a84c]" />
             </div>
             <p className="text-[10px] text-[#5a5864] text-center">{localMin} — {localMax} · <span className="text-[#c9a84c]">{visibleCount}</span> personnes</p>
+          </div>
+        )}
+      </div>
+
+      <div className="mx-4 h-px bg-[#2a2a3a]" />
+
+      {/* Branch Creator */}
+      <div className="px-4 py-3">
+        <div className="flex items-center justify-between mb-2.5">
+          <h3 className="text-[10px] font-medium text-[#5a5864] uppercase tracking-[0.15em] flex items-center gap-1.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+            <GitBranch size={10} /> Branches
+          </h3>
+          <button
+            onClick={() => setShowBranchCreator(v => !v)}
+            className={`text-[10px] px-2 py-0.5 rounded border transition-all cursor-pointer ${showBranchCreator ? 'border-[#c9a84c]/50 text-[#c9a84c] bg-[#c9a84c]/10' : 'border-[#2a2a3a] text-[#5a5864] hover:border-[#5a5864]'}`}
+          >
+            {showBranchCreator ? 'Fermer' : '+ Créer'}
+          </button>
+        </div>
+
+        {showBranchCreator && (
+          <div className="space-y-3 mb-3">
+            <input
+              type="text"
+              value={newBranchName}
+              onChange={e => setNewBranchName(e.target.value)}
+              placeholder="Nom de la branche..."
+              className="w-full bg-[#14141c] border border-[#2a2a3a] rounded-lg px-3 py-2 text-[12px] text-[#e8e6e1] placeholder-[#5a5864] focus:outline-none focus:border-[#c9a84c]/50 transition-colors"
+            />
+            
+            <div className="relative">
+              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#5a5864]" />
+              <input
+                type="text"
+                value={branchSearch}
+                onChange={e => setBranchSearch(e.target.value)}
+                placeholder="Rechercher des personnes..."
+                className="w-full bg-[#14141c] border border-[#2a2a3a] rounded-lg pl-8 pr-3 py-2 text-[12px] text-[#e8e6e1] placeholder-[#5a5864] focus:outline-none focus:border-[#c9a84c]/50 transition-colors"
+              />
+            </div>
+
+            {branchSearchResults.length > 0 && (
+              <div className="bg-[#14141c] border border-[#2a2a3a] rounded-lg max-h-32 overflow-y-auto">
+                {branchSearchResults.slice(0, 5).map(person => (
+                  <button
+                    key={person.id}
+                    onClick={() => togglePersonSelection(person.id)}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-[11px] transition-colors ${
+                      selectedPersons.has(person.id) 
+                        ? 'bg-[#c9a84c]/20 text-[#c9a84c]' 
+                        : 'text-[#e8e6e1] hover:bg-[#1e1e28]'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                      selectedPersons.has(person.id) 
+                        ? 'border-[#c9a84c] bg-[#c9a84c]' 
+                        : 'border-[#2a2a3a]'
+                    }`}>
+                      {selectedPersons.has(person.id) && <Check size={10} className="text-[#0a0a0f]" />}
+                    </div>
+                    <span>{person.firstName} {person.lastName}</span>
+                    {person.branch && <span className="text-[8px] text-[#5a5864] ml-auto">(branche)</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {selectedPersons.size > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#5a5864]">{selectedPersons.size} personne(s) sélectionnée(s)</span>
+                <button
+                  onClick={handleCreateBranch}
+                  disabled={!newBranchName.trim()}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-[#c9a84c] text-[#0a0a0f] text-[10px] font-medium rounded-md disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                >
+                  <Plus size={12} /> Créer
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {branches.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {branches.map((branch) => {
+              const personCount = persons.filter(p => p.branch === branch.id).length;
+              return (
+                <div key={branch.id} className="flex items-center gap-0.5 group">
+                  <button
+                    onClick={() => toggleBranchFilter(branch.id)}
+                    className={`px-2.5 py-1 rounded-l-md text-[11px] font-medium transition-all duration-200 border-y border-l cursor-pointer ${
+                      activeBranchFilters.includes(branch.id)
+                        ? 'border-transparent text-[#0a0a0f]'
+                        : 'border-[#2a2a3a] text-[#8a8894] hover:border-[#5a5864]'
+                    }`}
+                    style={activeBranchFilters.includes(branch.id) ? { backgroundColor: branch.color } : {}}
+                  >
+                    {branch.name} ({personCount})
+                  </button>
+                  <button
+                    onClick={() => deleteBranch(branch.id)}
+                    className={`px-1 py-1 rounded-r-md text-[11px] transition-all duration-200 border-y border-r opacity-0 group-hover:opacity-100 cursor-pointer ${
+                      activeBranchFilters.includes(branch.id)
+                        ? 'border-transparent text-[#0a0a0f] hover:bg-black/20'
+                        : 'border-[#2a2a3a] text-[#5a5864] hover:text-red-400 hover:border-red-900/50'
+                    }`}
+                    style={activeBranchFilters.includes(branch.id) ? { backgroundColor: branch.color } : {}}
+                    title="Supprimer la branche"
+                  >
+                    <Trash2 size={10} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

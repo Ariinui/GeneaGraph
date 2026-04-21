@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import type { Person, Relation, Source, Branch, ViewMode, RelationType, LayoutDirection, HierarchyFocus } from '@/types/genealogy';
-import { getSampleData, BRANCH_COLORS } from '@/data/sampleData';
+import { getSampleData } from '@/data/sampleData';
 import type { ParsedPerson, ParsedRelation } from '@/utils/gedcomParser';
 import { appwriteService } from '@/services/appwriteService';
 import { computeBetweenness } from '@/utils/betweenness';
@@ -122,6 +122,9 @@ interface AppContextType extends AppState {
   deleteRelation: (id: string) => void;
   clearAll: () => void;
   deleteBranch: (branchId: string) => void;
+  createBranch: (name: string, personIds: string[]) => void;
+  addPersonToBranch: (personId: string, branchId: string) => void;
+  removePersonFromBranch: (personId: string) => void;
   importData: (persons: ParsedPerson[], relations: ParsedRelation[], mode: 'replace' | 'merge') => void;
   toggleCloudSync: () => void;
   syncWithCloud: () => Promise<void>;
@@ -131,78 +134,43 @@ interface AppContextType extends AppState {
 
 const AppContext = createContext<AppContextType | null>(null);
 
-function detectBranches(persons: Person[], relations: Relation[]): Branch[] {
-  // Build adjacency list for alliance + parent relations
-  const adj: Map<string, Set<string>> = new Map();
-  for (const p of persons) {
-    adj.set(p.id, new Set());
-  }
-  for (const r of relations) {
-    if (r.type === 'parent' || r.type === 'alliance') {
-      adj.get(r.from)?.add(r.to);
-      adj.get(r.to)?.add(r.from);
-    }
-  }
+const BRANCH_COLORS = [
+  '#4a9eff', '#f472b6', '#10b981', '#f97316', '#8b5cf6', 
+  '#06b6d4', '#eab308', '#ef4444', '#22c55e', '#6366f1'
+];
 
-  // Greedy community detection
-  const visited = new Set<string>();
-  const communities: string[][] = [];
-
+function detectBranches(persons: Person[]): Branch[] {
+  const branchMap = new Map<string, string[]>();
+  
   for (const person of persons) {
-    if (visited.has(person.id)) continue;
-    const community: string[] = [];
-    const stack = [person.id];
-    while (stack.length > 0) {
-      const curr = stack.pop()!;
-      if (visited.has(curr)) continue;
-      visited.add(curr);
-      community.push(curr);
-      for (const neighbor of adj.get(curr) || []) {
-        if (!visited.has(neighbor)) stack.push(neighbor);
+    if (person.branch) {
+      if (!branchMap.has(person.branch)) {
+        branchMap.set(person.branch, []);
       }
+      branchMap.get(person.branch)!.push(person.id);
     }
-    communities.push(community);
   }
-
-  // Filter small communities and name branches
-  const branches: Branch[] = communities
-    .filter((c) => c.length >= 3)
-    .map((community, idx) => {
-      // Find hub (most connected)
-      let hubId = community[0];
-      let maxDegree = 0;
-      for (const pid of community) {
-        const degree = relations.filter(
-          (r) => (r.from === pid || r.to === pid) && (r.type === 'parent' || r.type === 'alliance')
-        ).length;
-        if (degree > maxDegree) {
-          maxDegree = degree;
-          hubId = pid;
-        }
-      }
-      const hub = persons.find((p) => p.id === hubId);
-      const color = BRANCH_COLORS[idx % BRANCH_COLORS.length];
-
-      return {
-        id: `branch-${idx}`,
-        name: hub ? `Branche ${hub.lastName}` : `Branche ${idx + 1}`,
-        color,
-        nodeCount: community.length,
-        hubNodeId: hubId,
-      };
-    });
-
-  // Assign branch to each person
-  const personBranchMap = new Map<string, string>();
-  communities.forEach((community, idx) => {
-    if (community.length >= 3) {
-      const branchId = `branch-${idx}`;
-      for (const pid of community) {
-        personBranchMap.set(pid, branchId);
-      }
+  
+  const branches: Branch[] = [];
+  let colorIndex = 0;
+  
+  for (const [branchId, memberIds] of branchMap) {
+    let branchName = branchId;
+    const nameMatch = branchId.match(/^branch-(.+?)-\d+$/);
+    if (nameMatch) {
+      branchName = nameMatch[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     }
-  });
-
+    
+    branches.push({
+      id: branchId,
+      name: branchName,
+      color: BRANCH_COLORS[colorIndex % BRANCH_COLORS.length],
+      nodeCount: memberIds.length,
+      hubNodeId: memberIds[0]
+    });
+    colorIndex++;
+  }
+  
   return branches;
 }
 
@@ -251,7 +219,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [showPivots, setShowPivots] = useState(false);
   const toggleShowPivots = useCallback(() => setShowPivots(p => !p), []);
 
-  const branches = useMemo(() => detectBranches(persons, relations), [persons, relations]);
+  const branches = useMemo(() => detectBranches(persons), [persons]);
 
   const betweennessMap = useMemo(() => {
     if (!showPivots) return new Map<string, number>();
@@ -259,10 +227,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [showPivots, persons, relations]);
 
   const deleteBranch = useCallback((branchId: string) => {
-    const ids = persons.filter(p => p.branch === branchId).map(p => p.id);
-    setPersons(prev => prev.filter(p => !ids.includes(p.id)));
-    setRelations(prev => prev.filter(r => !ids.includes(r.from) && !ids.includes(r.to)));
-  }, [persons]);
+    setPersons(prev => prev.map(p => p.branch === branchId ? { ...p, branch: undefined } : p));
+  }, []);
+
+  const createBranch = useCallback((name: string, personIds: string[]) => {
+    const branchId = `branch-${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
+    setPersons(prev => prev.map(p => 
+      personIds.includes(p.id) ? { ...p, branch: branchId } : p
+    ));
+  }, []);
+
+  const addPersonToBranch = useCallback((personId: string, branchId: string) => {
+    setPersons(prev => prev.map(p => 
+      p.id === personId ? { ...p, branch: branchId } : p
+    ));
+  }, []);
+
+  const removePersonFromBranch = useCallback((personId: string) => {
+    setPersons(prev => prev.map(p => 
+      p.id === personId ? { ...p, branch: undefined } : p
+    ));
+  }, []);
 
   useEffect(() => {
     setActiveBranchFilters(prev => {
@@ -609,6 +594,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     deleteRelation,
     clearAll,
     deleteBranch,
+    createBranch,
+    addPersonToBranch,
+    removePersonFromBranch,
     importData,
     toggleCloudSync,
     syncWithCloud,
